@@ -105,12 +105,12 @@ def generate_batch(batch_size, num_skips, skip_window):
         buffer.append(data[data_index])
         data_index = (data_index + 1) % len(data)
     for i in range(batch_size):
-    # Add all values in batch within the window to the batch EXCEPT the word to predict w_i
-    for l in range(len(indices)):
-        batch[i,l] = buffer[indices[l]]
-    labels[i] = buffer[skip_window]
-    buffer.append(data[data_index])
-    data_index = (data_index + 1) % len(data)
+        # Add all values in batch within the window to the batch EXCEPT the word to predict w_i
+        for l in range(len(indices)):
+            batch[i,l] = buffer[indices[l]]
+            labels[i] = buffer[skip_window]
+        buffer.append(data[data_index])
+        data_index = (data_index + 1) % len(data)
     return batch, labels
 
 batch, labels = generate_batch(batch_size=8, num_skips=2, skip_window=1)
