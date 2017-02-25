@@ -1,133 +1,118 @@
-
-# These are all the modules we'll be using later. Make sure you can import them
-# before proceeding further.
-import matplotlib.pyplot as plt
 import numpy as np
-import os
-import tarfile
-import urllib.request
-#from IPython.display import display, Image
-from scipy import ndimage
-from sklearn.linear_model import LogisticRegression
-import pickle
-
-
-num_classes = 10
-
-train_folders = ['data/notMNIST_large/A', 'data/notMNIST_large/B', 'data/notMNIST_large/C', 'data/notMNIST_large/D', 'data/notMNIST_large/E', 'data/notMNIST_large/F', 'data/notMNIST_large/G', 'data/notMNIST_large/H', 'data/notMNIST_large/I', 'data/notMNIST_large/J']#extract(train_filename)
-test_folders = ['data/notMNIST_small/A', 'data/notMNIST_small/B', 'data/notMNIST_small/C', 'data/notMNIST_small/D', 'data/notMNIST_small/E', 'data/notMNIST_small/F', 'data/notMNIST_small/G', 'data/notMNIST_small/H', 'data/notMNIST_small/I', 'data/notMNIST_small/J']#extract(test_filename)
-
-image_size = 28  # Pixel width and height.
-pixel_depth = 255.0  # Number of levels per pixel.
-
-def load(data_folders, min_num_images, max_num_images):
-    dataset = np.ndarray(
-    shape=(max_num_images, image_size, image_size), dtype=np.float32)
-    labels = np.ndarray(shape=(max_num_images), dtype=np.int32)
-    label_index = 0
-    image_index = 0
-    for folder in data_folders:
-        print(folder)
-        for image in os.listdir(folder):
-            if image_index >= max_num_images:
-                raise Exception('More images than expected: %d >= %d' % (num_images, max_num_images))
-            image_file = os.path.join(folder, image)
-            try:
-                image_data = (ndimage.imread(image_file).astype(float) - pixel_depth / 2) / pixel_depth
-                if image_data.shape != (image_size, image_size):
-                    raise Exception('Unexpected image shape: %s' % str(image_data.shape))
-                dataset[image_index, :, :] = image_data
-                labels[image_index] = label_index
-                image_index += 1
-            except IOError as e:
-                print('Could not read:', image_file, ':', e, '- it\'s ok, skipping.')
-        label_index += 1
-    num_images = image_index
-    dataset = dataset[0:num_images, :, :]
-    labels = labels[0:num_images]
-    if num_images < min_num_images:
-        raise Exception('Many fewer images than expected: %d < %d' % (num_images, min_num_images))
-    print('Full dataset tensor:', dataset.shape)
-    print('Mean:', np.mean(dataset))
-    print('Standard deviation:', np.std(dataset))
-    print('Labels:', labels.shape)
-    return dataset, labels
-
-def pickle_load(filename):
-    with open(filename, 'rb') as f:
-        b = pickle.load(f)
-    return b
-
-def pickle_save(data,filename):
-    with open(filename, "wb+") as f:
-        pickle.dump(data,f)
-    return True
-
-try:
-    train_dataset = pickle_load('data/train_dataset.pkl')
-    test_dataset = pickle_load('data/test_dataset.pkl')
-    train_labels = pickle_load('data/train_labels.pkl')
-    test_labels = pickle_load('data/test_labels.pkl')
-    print("Successfully loaded data")
-except Exception as e:
-    print(e)# coding=utf-8
-
-np.random.seed(133)
-def randomize(dataset, labels):
-    permutation = np.random.permutation(labels.shape[0])
-    shuffled_dataset = dataset[permutation,:,:]
-    shuffled_labels = labels[permutation]
-    return shuffled_dataset, shuffled_labels
-train_dataset, train_labels = randomize(train_dataset, train_labels)
-test_dataset, test_labels = randomize(test_dataset, test_labels)
-
-
-train_size = 450000
-valid_size = 18000
-valid_dataset = train_dataset[:valid_size,:,:]
-valid_labels = train_labels[:valid_size]
-train_dataset = train_dataset[valid_size:valid_size+train_size,:,:]
-train_labels = train_labels[valid_size:valid_size+train_size]
-print('Training', train_dataset.shape, train_labels.shape)
-print('Validation', valid_dataset.shape, valid_labels.shape)
-
+import tensorflow as tf
+from six.moves import cPickle as pickle
+from six.moves import range
 import os
 dir_path = os.path.dirname(os.path.realpath(__file__))
+save_path = os.path.join(dir_path,"saved")
 pickle_file = os.path.join(dir_path,'data','notMNIST.pkl')
 
-try:
-    f = open(pickle_file, 'wb')
-    save = {
-        'train_dataset': train_dataset,
-        'train_labels': train_labels,
-        'valid_dataset': valid_dataset,
-        'valid_labels': valid_labels,
-        'test_dataset': test_dataset,
-        'test_labels': test_labels,
-    }
-    pickle.dump(save, f, pickle.HIGHEST_PROTOCOL)
-    f.close()
-except Exception as e:
-    print('Unable to save data to', pickle_file, ':', e)
-    raise
-
-statinfo = os.stat(pickle_file)
-print('Compressed pickle size:', statinfo.st_size)
+with open(pickle_file, 'rb') as f:
+    save = pickle.load(f,encoding='latin1')
+    train_dataset = save['train_dataset']
+    train_labels = save['train_labels']
+    valid_dataset = save['valid_dataset']
+    valid_labels = save['valid_labels']
+    test_dataset = save['test_dataset']
+    test_labels = save['test_labels']
+    del save  # hint to help gc free up memory
+    print('Training set', train_dataset.shape, train_labels.shape)
+    print('Validation set', valid_dataset.shape, valid_labels.shape)
+    print('Test set', test_dataset.shape, test_labels.shape)
 
 
+image_size = 28
+num_labels = 10
 
-def trainModel(train_dataset,train_labels,valid_dataset,valid_labels,test_dataset,test_labels,num):
-    logreg = LogisticRegression()
-    train_dataset = [list(x.flatten()) for x in train_dataset[:num]]
-    train_labels = train_labels[:num]
-    test_dataset = [list(x.flatten()) for x in test_dataset]
-    valid_dataset = [list(x.flatten()) for x in valid_dataset]
+def reformat(dataset, labels):
+    dataset = dataset.reshape((-1, image_size * image_size)).astype(np.float32)
+    # Map 0 to [1.0, 0.0, 0.0 ...], 1 to [0.0, 1.0, 0.0 ...]
+    labels = (np.arange(num_labels) == labels[:,None]).astype(np.float32)
+    return dataset, labels
+train_dataset, train_labels = reformat(train_dataset, train_labels)
+valid_dataset, valid_labels = reformat(valid_dataset, valid_labels)
+test_dataset, test_labels = reformat(test_dataset, test_labels)
+print('Training set', train_dataset.shape, train_labels.shape)
+print('Validation set', valid_dataset.shape, valid_labels.shape)
+print('Test set', test_dataset.shape, test_labels.shape)
 
-    # we create an instance of Neighbours Classifier and fit the data.
-    logreg.fit(train_dataset,train_labels)
-    acc = logreg.score(valid_dataset,valid_labels)
-    print("Validation accuracy:",acc)
-    acc = logreg.score(test_dataset,test_labels)
-    print("Test accuracy:", acc)
 
-trainModel(train_dataset,train_labels,valid_dataset,valid_labels,test_dataset,test_labels,10000)
+batch_size = 128
+hidden_layer_size = 1024
+
+graph = tf.Graph()
+with graph.as_default():
+
+    # Input data. For the training data, we use a placeholder that will be fed
+    # at run time with a training minibatch.
+    tf_train_dataset = tf.placeholder(tf.float32,shape=(batch_size, image_size * image_size))
+    tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, num_labels))
+    tf_valid_dataset = tf.constant(valid_dataset)
+    tf_test_dataset = tf.constant(test_dataset)
+
+    # Variables.
+    weights1 = tf.Variable(tf.truncated_normal([image_size * image_size, hidden_layer_size]))
+    biases1 = tf.Variable(tf.zeros([hidden_layer_size]))
+    weights2 = tf.Variable(tf.truncated_normal([hidden_layer_size, num_labels]))
+    biases2 = tf.Variable(tf.zeros([num_labels]))
+
+    # Training computation. WITH DROPOUT
+    keep_prob = tf.placeholder(tf.float32)
+    vis_layer_1 = tf.matmul(tf_train_dataset, weights1) + biases1
+    dropout_layer_1 = tf.nn.dropout(tf.identity(vis_layer_1),keep_prob)
+    hidden_layer_1 = tf.nn.relu(dropout_layer_1)
+    dropout_layer_2 = tf.nn.dropout(tf.identity(hidden_layer_1),keep_prob)
+    logits = tf.matmul(tf.nn.dropout(dropout_layer_2,keep_prob), weights2) + biases2
+
+    # L2 regularization for the fully connected parameters.
+    regularizers = (tf.nn.l2_loss(weights1) + tf.nn.l2_loss(biases1) + tf.nn.l2_loss(weights2) + tf.nn.l2_loss(biases2))
+    # Loss
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels,logits=logits))
+    # Add the regularization term to the loss.
+    loss += 5e-4 * regularizers
+
+    # Optimizer.
+    global_step = tf.Variable(0)  # count the number of steps taken.
+    starter_learning_rate = 0.5
+    learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,100000, 0.96, staircase=True)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+    #optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+
+    # Predictions for the training, validation, and test data.
+    train_prediction = tf.nn.softmax(logits)
+    valid_prediction = tf.nn.softmax(tf.matmul(tf.nn.relu(tf.matmul(tf_valid_dataset,weights1) + biases1), weights2) + biases2)
+    test_prediction = tf.nn.softmax(tf.matmul(tf.nn.relu(tf.matmul(tf_test_dataset,weights1) + biases1), weights2) + biases2)
+
+def accuracy(predictions, labels):
+  return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0])
+
+num_steps = 3001
+
+with tf.Session(graph=graph) as session:
+    #new_saver = tf.train.import_meta_graph(os.path.join(save_path,'graph.meta'))
+    # Restore from path
+    #new_saver.restore(session, os.path.join(save_path,"graph"))
+
+    tf.global_variables_initializer().run()
+    print("Initialized")
+    for step in range(num_steps):
+        # Pick an offset within the training data, which has been randomized.
+        # Note: we could use better randomization across epochs.
+        offset = (step * batch_size) % (train_labels.shape[0] - batch_size)
+        # Generate a minibatch.
+        batch_data = train_dataset[offset:(offset + batch_size), :]
+        batch_labels = train_labels[offset:(offset + batch_size), :]
+        # Prepare a dictionary telling the session where to feed the minibatch.
+        # The key of the dictionary is the placeholder node of the graph to be fed,
+        # and the value is the numpy array to feed to it.
+        feed_dict = {tf_train_dataset : batch_data, tf_train_labels : batch_labels, keep_prob: 0.5}
+        _, l, predictions = session.run([optimizer, loss, train_prediction], feed_dict=feed_dict)
+        if (step % 500 == 0):
+            print("Minibatch loss at step %d: %f" % (step, l))
+            print("Minibatch accuracy: %.1f%%" % accuracy(predictions, batch_labels))
+            print("Validation accuracy: %.1f%%" % accuracy(valid_prediction.eval(), valid_labels))
+    print("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))
+
+    # Define saver
+    saver = tf.train.Saver(tf.global_variables())
+    saver.save(session, os.path.join(save_path,"graph"))

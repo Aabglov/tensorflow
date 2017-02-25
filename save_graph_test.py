@@ -32,7 +32,7 @@ except OSError as e:
     with graph.as_default():
         variable = tf.Variable(42, name='foo')
         # Initialize all variables in graph
-        initialize = tf.global_variables_initializer()
+        #initialize = tf.global_variables_initializer()
         assign = variable.assign(13)
         graph.add_to_collection('var',variable)
 
@@ -40,7 +40,7 @@ except OSError as e:
     with tf.Session(graph=graph) as sess:
         # Initialize a Saver object to save our model
         saver = tf.train.Saver()
-        sess.run(initialize)
+        tf.global_variables_initializer().run()#sess.run(initialize)
         sess.run(assign)
         print(sess.run(variable))
         v = graph.get_collection('var')[0]

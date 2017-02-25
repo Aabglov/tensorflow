@@ -70,7 +70,7 @@ with graph.as_default():
                   tf.nn.l2_loss(weights2) + tf.nn.l2_loss(biases2))
     # Loss
     loss = tf.reduce_mean(
-    tf.nn.softmax_cross_entropy_with_logits(logits, tf_train_labels))
+    tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels,logits=logits))
     # Add the regularization term to the loss.
     loss += 5e-4 * regularizers
 
