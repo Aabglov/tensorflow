@@ -26,7 +26,7 @@ def maybe_download(filename, expected_bytes):
       'Failed to verify ' + filename + '. Can you get to it with a browser?')
   return filename
 
-filename = maybe_download('text8.zip', 31344016)
+filename = maybe_download('data/text8.zip', 31344016)
 
 
 def read_data(filename):
@@ -34,7 +34,7 @@ def read_data(filename):
   for name in f.namelist():
     return tf.compat.as_str(f.read(name))
   f.close()
-  
+
 text = read_data(filename)
 print('Data size %d' % len(text))
 
@@ -56,7 +56,7 @@ def char2id(char):
   else:
     print('Unexpected character: %s' % char)
     return 0
-  
+
 def id2char(dictid):
   if dictid > 0:
     return chr(dictid + first_letter - 1)
@@ -80,7 +80,7 @@ class BatchGenerator(object):
     segment = self._text_size // (batch_size)
     self._cursor = [ offset * segment for offset in range(batch_size)]
     self._last_batch = self._next_batch()
-  
+
   def _next_batch(self):
     """Generate a single batch from the current cursor position in the data."""
     batch = np.zeros(shape=(self._batch_size,self._gram_size), dtype=np.float)
@@ -89,7 +89,7 @@ class BatchGenerator(object):
         batch[b,g] = char2id(self._text[self._cursor[b]+g])
       self._cursor[b] = (self._cursor[b] + 1) % self._text_size
     return batch
-  
+
   def next(self):
     """Generate the next array of batches from the data. The array consists of
     the last batch of the previous array, followed by num_unrollings new ones.
@@ -171,7 +171,7 @@ def embed2onehot(embed):
   b = embed.shape[0]
   oh = np.zeros(shape=(b, vocabulary_size), dtype=np.float32)
   for o in range(b):
-    oh[o, embed[o]] = 1.0
+    oh[o, int(embed[o])] = 1.0
   return oh
 
 num_nodes = 64
@@ -181,7 +181,7 @@ gram = 2
 
 graph = tf.Graph()
 with graph.as_default():
-  
+
   # Parameters:
   # Input gate: input, previous output, and bias.
   x_all = tf.Variable(tf.truncated_normal([gram_size*vocabulary_size, 4*num_nodes], -0.1, 0.1))
@@ -189,7 +189,7 @@ with graph.as_default():
   ib = tf.Variable(tf.zeros([1, num_nodes]))
   # Forget gate: input, previous output, and bias.
   fb = tf.Variable(tf.zeros([1, num_nodes]))
-  # Memory cell: input, state and bias.                             
+  # Memory cell: input, state and bias.
   cb = tf.Variable(tf.zeros([1, num_nodes]))
   # Output gate: input, previous output, and bias.
   ob = tf.Variable(tf.zeros([1, num_nodes]))
@@ -202,7 +202,7 @@ with graph.as_default():
   # Embeddings
   embeddings = tf.Variable(tf.random_uniform([vocabulary_size, vocabulary_size], -1.0, 1.0))
   keep_prob = tf.placeholder(tf.float32)
-  
+
   # Definition of the cell computation.
   def lstm_cell(i, o, state):
     """Create a LSTM cell. See e.g.: http://arxiv.org/pdf/1402.1128v1.pdf
@@ -210,7 +210,7 @@ with graph.as_default():
     previous state and the gates."""
     i_mul = tf.matmul(i,x_all)
     o_mul = tf.matmul(o,m_all)
-    
+
     ix_mul = i_mul[:,:num_nodes]# tf.matmul(i, ix)
     fx_mul = i_mul[:,num_nodes:2*num_nodes]# tf.matmul(i, fx)
     cx_mul = i_mul[:,2*num_nodes:3*num_nodes]# tf.matmul(i, cx)
@@ -220,7 +220,7 @@ with graph.as_default():
     fm_mul = o_mul[:,num_nodes:2*num_nodes] # tf.matmul(o,fm)
     cm_mul = o_mul[:,2*num_nodes:3*num_nodes] # tf.matmul(o,cm)
     om_mul = o_mul[:,3*num_nodes:] # tf.matmul(o,om)
-    
+
     input_gate = tf.sigmoid(ix_mul + im_mul + ib)
     forget_gate = tf.sigmoid(fx_mul + fm_mul + fb)
     update = cx_mul + cm_mul + cb
@@ -236,7 +236,7 @@ with graph.as_default():
     data_labels.append(tf.placeholder(tf.float32, shape=[batch_size,vocabulary_size]))
   train_inputs = train_data[:num_unrollings]
   train_labels = data_labels[1:]  # labels are inputs shifted by one time step.
-  
+
   # Unrolled LSTM loop.
   outputs = list()
   output = saved_output
@@ -255,10 +255,8 @@ with graph.as_default():
   with tf.control_dependencies([saved_output.assign(output),
                                 saved_state.assign(state)]):
     # Classifier.
-    logits = tf.nn.xw_plus_b(tf.concat(0, outputs), w, b)
-    loss = tf.reduce_mean(
-      tf.nn.softmax_cross_entropy_with_logits(
-        logits, tf.concat(0, train_labels)))
+    logits = tf.matmul(tf.concat(outputs, 0),w) + b
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf.concat(train_labels, 0), logits=logits) )
 
   # Optimizer.
   global_step = tf.Variable(0)
@@ -272,7 +270,7 @@ with graph.as_default():
 
   # Predictions.
   train_prediction = tf.nn.softmax(logits)
-  
+
   # Sampling and validation eval: batch 1, no unrolling.
   sample_input = tf.placeholder(tf.int32, shape=[1,gram_size])
   saved_sample_output = tf.Variable(tf.zeros([1, num_nodes]))
@@ -294,7 +292,7 @@ num_steps = 7001
 summary_frequency = 100
 
 with tf.Session(graph=graph) as session:
-  tf.initialize_all_variables().run()
+  tf.global_variables_initializer().run()
   print('Initialized')
   mean_loss = 0
   for step in range(num_steps):

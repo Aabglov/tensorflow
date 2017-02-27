@@ -26,7 +26,7 @@ def maybe_download(filename, expected_bytes):
         raise Exception('Failed to verify ' + filename + '. Can you get to it with a browser?')
     return filename
 
-filename = maybe_download('text8.zip', 31344016)
+filename = maybe_download('data/text8.zip', 31344016)
 
 def read_data(filename):
     f = zipfile.ZipFile(filename)
@@ -158,7 +158,7 @@ with graph.as_default():
     #embed = tf.nn.embedding_lookup(embeddings, train_dataset)
 
     # Compute the softmax loss, using a sample of the negative labels each time.
-    loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(softmax_weights, softmax_biases, embed_sum, train_labels, num_sampled, vocabulary_size))
+    loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(softmax_weights, softmax_biases, train_labels, embed_sum, num_sampled, vocabulary_size))
 
     # Optimizer.
     optimizer = tf.train.AdagradOptimizer(1.0).minimize(loss)
