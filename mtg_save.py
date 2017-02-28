@@ -10,9 +10,79 @@ from six.moves import range
 from six.moves.urllib.request import urlretrieve
 import os
 
-##### PATHS
+# PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join("saved","mtg.ckpt")
+model_path = os.path.join(dir_path,"saved","mtg","mtg.ckpt")
+data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
+
+# Load mtg tokenized data
+# Special thanks to mtgencode: https://github.com/billzorn/mtgencode
+with open(data_path,"r") as f:
+    # Each card occupies its own line in this tokenized version
+    raw_txt = f.read().split("\n")
+
+# What's with those weird symbols?
+# u'\xbb' is our GO symbol (»)
+# u'\xac' is our UNKNOWN symbol (¬)
+# u'\xa4' is our END symbol (¤)
+# They're arbitrarily chosen, but
+# I think they both:
+#   1). Are unlikely to appear in regular data, let alone cleaned data.
+#   2). Look awesome.
+vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
+         '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
+         '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
+         "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xa4']
+if not vocab:
+    # Create our character vocaulary
+    vocab = []
+    # for each row in raw_txt
+    for r in raw_txt:
+        print("row {} of {} complete".format(count,total))
+        count += 1
+        # for each letter in that row
+        for l in r:
+            if l not in vocab:
+                vocab.append(l)
+
+print("VOCABULARY: {}".format(vocab))
+
+# Creat our Word Helper object
+vocab_len = len(vocab)
+dataset = []
+#for r in raw_txt:
+WH = word_helpers.WordHelper(vocab)
+
+# Brief unit test
+r = raw_txt[0]
+b = WH.word2batch(r)
+b2 = WH.batch2word(b)
+assert r == b2,"WordHelper not casting batches correctly"
+
+# Create our dataset
+dataset = []
+seq_max = 0
+for r in raw_txt:
+    # NOTE: We're treating each card
+    # as a single word.
+    # In this case ' ' is no more special than '3'
+    b = WH.word2batch(r)
+    # Set the (possibly) new sequence maximum length
+    seq_max = max(seq_max,len(b))
+    dataset.append(b)
+
+print("Sequence maximu length: {}".format(seq_max))
+ratio = [0.7, 0.15, 0.15]
+# number of examples
+data_len = len(x)
+lens = [ int(data_len*item) for item in ratio ]
+trainX = dataset[:lens[0]]
+testX  = dataset[lens[0]:lens[0]+lens[1]]
+validX = dataset[-lens[-1]:]
+
+
+
+
 
 ##### PROBABILITY HELPERS
 

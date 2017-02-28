@@ -12,7 +12,7 @@ import os
 
 ##### PATHS
 dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join("saved","udacity6.ckpt")
+model_path = os.path.join(dir_path,"saved","udacity6.ckpt")
 url = 'http://mattmahoney.net/dc/'
 
 ##### PROBABILITY HELPERS
@@ -218,7 +218,7 @@ with graph.as_default():
     # State saving across unrollings.
     with tf.control_dependencies([saved_output.assign(output),saved_state.assign(state)]):
         # Classifier.
-        logits = tf.matmul(tf.concat(outputs, 0),w) + b 
+        logits = tf.matmul(tf.concat(outputs, 0),w) + b
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf.concat(train_labels, 0), logits=logits) )
 
     # Optimizer.
