@@ -1,25 +1,66 @@
-# SCIPY
+# IMPORTS
 import random
+import os
 
 class WordHelper:
-    def __init__(self,vocab,max_word_size=10, custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_eos=u'\xa4'):
+    def __init__(self,raw_text,vocab=None,max_word_size=10, custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_eos=u'\xa4'):
+
+        self.batches = []
+        # Generate vocabulary
+        count = 1
+        rows = raw_text.split('\n')
+        total = len(rows)
+        if not vocab:
+            # Create our character vocaulary
+            self.vocab = []
+        else:
+            self.vocab = vocab
+
+        # for each row in raw_txt
+        for r in rows:
+            print("row {} of {} complete".format(count,total))
+            count += 1
+            # for each letter in that row
+            for l in r:
+                if l not in self.vocab:
+                    self.vocab.append(l)
+
+            # Skip empty lines
+            if r.replace(" ","") != "":
+                # Add our go and eos tags
+                if r[-1] != custom_eos:
+                    r = custom_go + r + custom_eos
+                else:
+                    r = custom_go + r
+                self.batches.append(r)
+            else:
+                # Don't empty lines to our batches
+                pass
+        else:
+            self.vocab = vocab
+
         # Determine/Set the GO, UNKOWN and END-OF-SEQUENCE tags
         self.go_char = custom_go
         self.unk_char = custom_unk
         self.eos_char = custom_eos
         for c in [custom_go,custom_unk,custom_eos]:
-            if c not in vocab:
-                vocab.append(c)
-        self.eos = vocab.index(self.eos_char)
-        self.go = vocab.index(self.go_char)
-        self.unk = vocab.index(self.unk_char)
+            if c not in self.vocab:
+                self.vocab.append(c)
+        self.eos = self.vocab.index(self.eos_char)
+        self.go = self.vocab.index(self.go_char)
+        self.unk = self.vocab.index(self.unk_char)
 
         # Set values to class
-        self.vocab = vocab
-        self.vocab_size = len(vocab)
+        self.vocab_size = len(self.vocab)
         self.vocab_indices = [i for i in range(self.vocab_size)]
         # This value may not be used in a character RNN
         self.max_word_size = max_word_size
+
+        # Set up batch generator
+        self.batch_index = 0
+        self.current_batch = self.batches[0]
+        self.letter_index = 0
+        self.num_batches = len(self.batches)
 
     def char2id(self,char):
         if char in self.vocab:
@@ -33,40 +74,41 @@ class WordHelper:
         else:
             return self.unk_char
 
-    # Word helpers
-    def genRandWord(self):
-        word_len = np.random.randint(1,self.max_word_size+1) # randint selects from 1 below high, increase by 1 to accomodate
-        word = [self.id2char(np.random.randint(1,self.vocab_size)) for _ in range(word_len)]
-        return ''.join(word)
+    def GenBatch(self):
+        x = self.char2id(self.current_batch[self.letter_index])
+        y = self.char2id(self.current_batch[self.letter_index+1])
+        # If we've reached the EOS tag then move onto the next batch
+        # NOTE: we're comparing y, not x.
+        # There's nothing to generate after y tag == EOS
+        if y == self.eos:
+            self.letter_index = 0
+            self.batch_index += 1
+            self.batch_index = self.batch_index % self.num_batches
+        # Otherwise just move onto the next letter within this batch
+        else:
+            self.letter_index += 1
+        return x,y
 
-    def genRandBatch(self):
-        word = self.genRandWord()
-        batch = self.word2batch(word)
-        rev_batch = self.word2batch(self.reverseWord(word))
-        return castInt(batch),castInt(rev_batch)
 
-    # BATCH CONVERSIONS
-    def batch2word(self,batch):
-        return ''.join([self.id2char(i) for i in batch if i != self.eos]) # Skip End of Sequence tag
 
-    def word2batch(self,word):
-        batch = [self.char2id(letter) for letter in word] + [self.eos] # Add End of Sequence tag
-        return batch
 
-    def id2onehot(self,i):
-        oh = np.zeros(self.vocab_size)
-        oh[i] = 1
-        return oh
 
-    def onehot2id(self,oh):
-        i = np.argmax(oh)
-        return i
+def mtg_test():
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    model_path = os.path.join(dir_path,"saved","mtg","mtg.ckpt")
+    data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 
-    def words2text(self,words):
-        text = ''
-        for w in words:
-            if len(w) > self.max_word_size:
-                words.remove(w)
-            else:
-                text += w + (' ' * (self.max_word_size - len(w)))
-        return text
+    # Load mtg tokenized data
+    # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
+    with open(data_path,"r") as f:
+        # Each card occupies its own line in this tokenized version
+        raw_txt = f.read()
+
+    wh = WordHelper(raw_txt)
+    for _ in range(250000):
+        a,b = wh.GenBatch()
+        print(wh.id2char(a),wh.id2char(b))
+
+
+if __name__ == "__main__":
+    mtg_test()

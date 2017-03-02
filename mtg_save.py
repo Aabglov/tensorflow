@@ -3,12 +3,9 @@
 import os
 import numpy as np
 import random
-import string
 import tensorflow as tf
-import zipfile
-from six.moves import range
-from six.moves.urllib.request import urlretrieve
 import os
+import word_helpers
 
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -19,7 +16,7 @@ data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
 with open(data_path,"r") as f:
     # Each card occupies its own line in this tokenized version
-    raw_txt = f.read().split("\n")
+    raw_txt = f.read()#.split("\n")
 
 # What's with those weird symbols?
 # u'\xbb' is our GO symbol (»)
@@ -33,52 +30,8 @@ vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n'
          '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
          '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
          "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xa4']
-if not vocab:
-    # Create our character vocaulary
-    vocab = []
-    # for each row in raw_txt
-    for r in raw_txt:
-        print("row {} of {} complete".format(count,total))
-        count += 1
-        # for each letter in that row
-        for l in r:
-            if l not in vocab:
-                vocab.append(l)
 
-print("VOCABULARY: {}".format(vocab))
-
-# Creat our Word Helper object
-vocab_len = len(vocab)
-dataset = []
-#for r in raw_txt:
-WH = word_helpers.WordHelper(vocab)
-
-# Brief unit test
-r = raw_txt[0]
-b = WH.word2batch(r)
-b2 = WH.batch2word(b)
-assert r == b2,"WordHelper not casting batches correctly"
-
-# Create our dataset
-dataset = []
-seq_max = 0
-for r in raw_txt:
-    # NOTE: We're treating each card
-    # as a single word.
-    # In this case ' ' is no more special than '3'
-    b = WH.word2batch(r)
-    # Set the (possibly) new sequence maximum length
-    seq_max = max(seq_max,len(b))
-    dataset.append(b)
-
-print("Sequence maximu length: {}".format(seq_max))
-ratio = [0.7, 0.15, 0.15]
-# number of examples
-data_len = len(x)
-lens = [ int(data_len*item) for item in ratio ]
-trainX = dataset[:lens[0]]
-testX  = dataset[lens[0]:lens[0]+lens[1]]
-validX = dataset[-lens[-1]:]
+WH = word_helpers.WordHelper(raw_txt, vocab)
 
 
 
@@ -114,112 +67,13 @@ def random_distribution():
     b = np.random.uniform(0.0, 1.0, size=[1, vocabulary_size])
     return b/np.sum(b, 1)[:,None]
 
-##### INPUT DATA
 
-def maybe_download(filename, expected_bytes):
-    """Download a file if not present, and make sure it's the right size."""
-    if not os.path.exists(filename):
-        filename, _ = urlretrieve(url + filename, filename)
-    statinfo = os.stat(filename)
-    if statinfo.st_size == expected_bytes:
-        print('Found and verified %s' % filename)
-    else:
-        print(statinfo.st_size)
-        raise Exception(
-            'Failed to verify ' + filename + '. Can you get to it with a browser?')
-    return filename
-
-def read_data(filename):
-    f = zipfile.ZipFile(filename)
-    for name in f.namelist():
-        return tf.compat.as_str(f.read(name))
-    f.close()
-
-
-##### BATCH GENERATOR
-
-def char2id(char):
-    if char in string.ascii_lowercase:
-        return ord(char) - first_letter + 1
-    elif char == ' ':
-        return 0
-    else:
-        print('Unexpected character: %s' % char)
-        return 0
-
-def id2char(dictid):
-    if dictid > 0:
-        return chr(dictid + first_letter - 1)
-    else:
-        return ' '
-
-class BatchGenerator(object):
-    def __init__(self, text, batch_size, num_unrollings):
-        self._text = text
-        self._text_size = len(text)
-        self._batch_size = batch_size
-        self._num_unrollings = num_unrollings
-        segment = self._text_size // batch_size
-        self._cursor = [ offset * segment for offset in range(batch_size)]
-        self._last_batch = self._next_batch()
-
-    def _next_batch(self):
-        """Generate a single batch from the current cursor position in the data."""
-        batch = np.zeros(shape=(self._batch_size, vocabulary_size), dtype=np.float)
-        for b in range(self._batch_size):
-            batch[b, char2id(self._text[self._cursor[b]])] = 1.0
-            self._cursor[b] = (self._cursor[b] + 1) % self._text_size
-        return batch
-
-    def next(self):
-        """Generate the next array of batches from the data. The array consists of
-        the last batch of the previous array, followed by num_unrollings new ones.
-        """
-        batches = [self._last_batch]
-        for step in range(self._num_unrollings):
-            batches.append(self._next_batch())
-        self._last_batch = batches[-1]
-        return batches
-
-def characters(probabilities):
-    """Turn a 1-hot encoding or a probability distribution over the possible
-    characters back into its (mostl likely) character representation."""
-    return [id2char(c) for c in np.argmax(probabilities, 1)]
-
-def batches2string(batches):
-    """Convert a sequence of batches back into their (most likely) string
-    representation."""
-    s = [''] * batches[0].shape[0]
-    for b in batches:
-        s = [''.join(x) for x in zip(s, characters(b))]
-    return s
 
 ##### CONSTANTS
-
-filename = maybe_download('data/text8.zip', 31344016)
-text = read_data(filename)
-print('Data size %d' % len(text))
-
-valid_size = 1000
-valid_text = text[:valid_size]
-train_text = text[valid_size:]
-train_size = len(train_text)
-
-vocabulary_size = len(string.ascii_lowercase) + 1 # [a-z] + ' '
-first_letter = ord(string.ascii_lowercase[0])
-
-batch_size=64
-num_unrollings=10
+batch_size = 64
+num_unrollings = 10
 num_nodes = 64
 embedding_size = 64
-
-train_batches = BatchGenerator(train_text, batch_size, num_unrollings)
-valid_batches = BatchGenerator(valid_text, 1, 1)
-
-#print(batches2string(train_batches.next()))
-#print(batches2string(train_batches.next()))
-#print(batches2string(valid_batches.next()))
-#print(batches2string(valid_batches.next()))
 
 
 ############################## GRAPH ########################################
@@ -308,9 +162,9 @@ with graph.as_default():
     saved_sample_state = tf.Variable(tf.zeros([1, num_nodes]))
     reset_sample_state = tf.group(
         saved_sample_output.assign(tf.zeros([1, num_nodes])),
-        saved_sample_state.assign(tf.zeros([1, num_nodes])))
-    sample_output, sample_state = lstm_cell(
-        sample_input, saved_sample_output, saved_sample_state)
+        saved_sample_state.assign(tf.zeros([1, num_nodes]))
+        )
+    sample_output, sample_state = lstm_cell(sample_input, saved_sample_output, saved_sample_state)
     with tf.control_dependencies([saved_sample_output.assign(sample_output),saved_sample_state.assign(sample_state)]):
         sample_prediction = tf.nn.softmax(tf.nn.xw_plus_b(sample_output, w, b))
 
@@ -337,10 +191,8 @@ with tf.Session(graph=graph) as session:
 
     mean_loss = 0
     for step in range(num_steps):
-        batches = train_batches.next()
-        feed_dict = dict()
-        for i in range(num_unrollings + 1):
-            feed_dict[train_data[i]] = batches[i]
+        train_x,train_y = WH.GenBatch()
+        feed_dict = {x: train_x, y: train_y}
         _, l, predictions, lr = session.run([optimizer, loss, train_prediction, learning_rate], feed_dict=feed_dict)
         mean_loss += l
         if step % summary_frequency == 0:

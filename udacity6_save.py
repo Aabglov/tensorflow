@@ -152,7 +152,6 @@ valid_batches = BatchGenerator(valid_text, 1, 1)
 #print(batches2string(valid_batches.next()))
 #print(batches2string(valid_batches.next()))
 
-
 ############################## GRAPH ########################################
 graph = tf.Graph()
 with graph.as_default():
