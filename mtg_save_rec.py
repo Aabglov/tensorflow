@@ -11,7 +11,7 @@ import pickle
 
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join(dir_path,"saved","mtg","mtg.ckpt")
+model_path = os.path.join(dir_path,"saved","mtg","mtg_rec.ckpt")
 data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 
 # Load mtg tokenized data
@@ -45,49 +45,46 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 0.001
-N_HIDDEN_1 = 256 # 1st layer number of features
-N_HIDDEN_2 = 256 # 2nd layer number of features
+LEARNING_RATE = 0.01
 N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
+LSTM_SIZE = 256
+NUM_LAYERS = 2
+BATCH_SIZE = 1
 NUM_EPOCHS = 1000
 MINI_BATCH_LEN = 100
 DISPLAY_STEP = 10
-##### PROBABILITY HELPERS
-
+MAX_LENGTH = 150
 
 graph = tf.Graph()
 with graph.as_default():
     # tf Graph input
-    x = tf.placeholder("float", [None, N_INPUT])
-    y = tf.placeholder("float", [None, N_CLASSES])
+    x = tf.placeholder(tf.float32, [None,  N_INPUT])
+    y = tf.placeholder(tf.float32, [None, N_CLASSES])
 
-    # Create model
-    def multilayer_perceptron(x, weights, biases):
-        # Hidden layer with RELU activation
-        layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
-        layer_1 = tf.nn.relu(layer_1)
-        # Hidden layer with RELU activation
-        layer_2 = tf.add(tf.matmul(layer_1, weights['h2']), biases['b2'])
-        layer_2 = tf.nn.relu(layer_2)
-        # Output layer with linear activation
-        out_layer = tf.matmul(layer_2, weights['out']) + biases['out']
-        return out_layer
-
-    # Store layers weight & bias
+    # Define weights
     weights = {
-        'h1': tf.Variable(tf.random_normal([N_INPUT, N_HIDDEN_1])),
-        'h2': tf.Variable(tf.random_normal([N_HIDDEN_1, N_HIDDEN_2])),
-        'out': tf.Variable(tf.random_normal([N_HIDDEN_2, N_CLASSES]))
+        'out': tf.Variable(tf.random_normal([LSTM_SIZE,  N_CLASSES]))
     }
     biases = {
-        'b1': tf.Variable(tf.random_normal([N_HIDDEN_1])),
-        'b2': tf.Variable(tf.random_normal([N_HIDDEN_2])),
         'out': tf.Variable(tf.random_normal([N_CLASSES]))
     }
 
-    # Construct model
-    out = multilayer_perceptron(x, weights, biases)
+    def model(x, weights, biases):
+        # Cell definition
+        lstm = tf.contrib.rnn.BasicLSTMCell(LSTM_SIZE, state_is_tuple=True)
+
+        # Full model definition
+        stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
+
+        outputs, states = tf.contrib.rnn.static_rnn(stacked_lstm, [x], dtype=tf.float32)
+
+        # Linear activation, using rnn inner loop last output
+        return tf.matmul(outputs[-1], weights['out']) + biases['out']
+
+    out = model(x, weights, biases)
+
+    # Create the softmax vector for prediction comparison
     pred = tf.nn.softmax(logits=out)
 
     # Define loss and optimizer
@@ -127,6 +124,7 @@ with tf.Session(graph=graph) as sess:
         avg_cost /= MINI_BATCH_LEN
         # Display logs per epoch step
         if epoch % DISPLAY_STEP == 0:
+            print(" ") # Spacer
             print("Epoch:", '%04d' % (epoch+1), "cost=" , "{:.9f}".format(avg_cost))
             # Test model
             preds = []
