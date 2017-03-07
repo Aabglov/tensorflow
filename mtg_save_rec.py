@@ -45,11 +45,11 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.001
 N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
 LSTM_SIZE = 256
-NUM_LAYERS = 2
+NUM_LAYERS = 3
 BATCH_SIZE = 1
 NUM_EPOCHS = 1000
 MINI_BATCH_LEN = 100
