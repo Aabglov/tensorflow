@@ -45,12 +45,14 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.01
 N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
 LSTM_SIZE = 256
 NUM_LAYERS = 3
-BATCH_SIZE = 1
+NUM_STEPS = 10
+#BATCH_SIZE = 100
+NUM_STEPS = 10
 NUM_EPOCHS = 1000
 MINI_BATCH_LEN = 100
 DISPLAY_STEP = 10
@@ -58,50 +60,89 @@ MAX_LENGTH = 150
 
 graph = tf.Graph()
 with graph.as_default():
-    # tf Graph input
-    x = tf.placeholder(tf.float32, [None,  N_INPUT])
-    y = tf.placeholder(tf.float32, [None, N_CLASSES])
+    # Placeholders
+    x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
+    y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
 
-    # Define weights
-    weights = {
-        'out': tf.Variable(tf.random_normal([LSTM_SIZE,  N_CLASSES]))
-    }
-    biases = {
-        'out': tf.Variable(tf.random_normal([N_CLASSES]))
-    }
+    # Get dynamic batch_size
+    batch_size = tf.shape(x)[0]
+    init_state = tf.zeros([batch_size, LSTM_SIZE])#[tf.zeros([batch_size, LSTM_SIZE])] * NUM_LAYERS
 
-    def model(x, weights, biases):
-        # Cell definition
-        lstm = tf.contrib.rnn.BasicLSTMCell(LSTM_SIZE, state_is_tuple=True)
+    #Inputs
+    rnn_inputs = tf.one_hot(x, N_CLASSES)
 
-        # Full model definition
-        stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
+    # RNN
+    #lstm = tf.contrib.rnn.BasicLSTMCell(LSTM_SIZE, state_is_tuple=True)
+    #stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
+    #rnn_outputs, final_state = tf.nn.dynamic_rnn(stacked_lstm, rnn_inputs, initial_state=init_state)
+    lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
+    stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS)
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                 inputs=rnn_inputs,
+                                                 initial_state=stacked_lstm.zero_state(batch_size,tf.float32))
 
-        outputs, states = tf.contrib.rnn.static_rnn(stacked_lstm, [x], dtype=tf.float32)
+    #Predictions, loss, training step
+    with tf.variable_scope('softmax'):
+        W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
+        b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
+    logits = tf.reshape(
+                tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
+                [batch_size, NUM_STEPS, N_CLASSES])
+    pred = tf.nn.softmax(logits)
 
-        # Linear activation, using rnn inner loop last output
-        return tf.matmul(outputs[-1], weights['out']) + biases['out']
+    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
+    cost = tf.reduce_mean(losses)
+    optimizer = tf.train.AdagradOptimizer(LEARNING_RATE).minimize(cost)
 
-    out = model(x, weights, biases)
-
-    # Create the softmax vector for prediction comparison
-    pred = tf.nn.softmax(logits=out)
-
-    # Define loss and optimizer
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out, labels=y))
-    optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(cost)
-
-    # Test model
-    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+    # Accuracy
+    #correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
     # Calculate accuracy
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-
-    # Initializing the variables
+    #accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+    # Initialize variables
     init = tf.global_variables_initializer()
-
     # 'Saver' op to save and restore all the variables
     saver = tf.train.Saver()
 
+
+# with graph.as_default():
+#     # tf Graph input
+#     x = tf.placeholder(tf.float32, [None,  N_INPUT])
+#     y = tf.placeholder(tf.float32, [None, N_CLASSES])
+#
+#     # Define weights
+#     weights = {
+#         'out': tf.Variable(tf.random_normal([LSTM_SIZE,  N_CLASSES]))
+#     }
+#     biases = {
+#         'out': tf.Variable(tf.random_normal([N_CLASSES]))
+#     }
+#
+#     def model(x, weights, biases):
+#         # Cell definition
+#         lstm = tf.contrib.rnn.BasicLSTMCell(LSTM_SIZE, state_is_tuple=True)
+#         # Full model definition
+#         stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
+#         outputs, states = tf.contrib.rnn.static_rnn(stacked_lstm, [x], dtype=tf.float32)
+#         # Linear activation, using rnn inner loop last output
+#         return tf.matmul(outputs[-1], weights['out']) + biases['out']
+#
+#     # The return of our model
+#     out = model(x, weights, biases)
+#     # Create the softmax vector for prediction comparison
+#     pred = tf.nn.softmax(logits=out)
+#     # Define loss and optimizer
+#     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out, labels=y))
+#     optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(cost)
+#     # Test model
+#     correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+#     # Calculate accuracy
+#     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+#     # Initializing the variables
+#     init = tf.global_variables_initializer()
+#     # 'Saver' op to save and restore all the variables
+#     saver = tf.train.Saver()
+
+print("Beginning Session")
 #Running first session
 with tf.Session(graph=graph) as sess:
     # Initialize variables
@@ -117,7 +158,8 @@ with tf.Session(graph=graph) as sess:
     for epoch in range(NUM_EPOCHS):
         avg_cost = 0
         for b in range(MINI_BATCH_LEN):
-            batch_x, batch_y = WH.TrainBatches.next()
+            #batch_x, batch_y = WH.TrainBatches.next()
+            batch_x,batch_y = WH.TrainBatches.next_card_id(NUM_STEPS)
             # Run optimization op (backprop) and cost op (to get loss value)
             _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y})
             avg_cost += c
@@ -129,16 +171,17 @@ with tf.Session(graph=graph) as sess:
             # Test model
             preds = []
             true = []
-            avg_acc = 0
-            for b in range(MINI_BATCH_LEN):
-                batch_x, batch_y = WH.TestBatches.next()
-                p,_,acc = sess.run([pred,correct_prediction,accuracy], feed_dict={x: batch_x, y: batch_y})
-                preds.append(np.random.choice(WH.vocab.vocab, 1, p=p[0])[0])
-                true.append(WH.vocab.onehot2char(batch_y))
-                avg_acc += acc
+            #for b in range(MINI_BATCH_LEN):
+            batch_x, batch_y = WH.TestBatches.next_card_id(NUM_STEPS)#.next()
+            p = sess.run([pred], feed_dict={x: batch_x, y: batch_y})[0]
+            for k in p:
+                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=k[0])[0]
+                preds.append(pred_letter)
+            for l in batch_y:
+                true.append(WH.vocab.id2char(l[0]))
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
-            print("Accuracy:", acc/MINI_BATCH_LEN)
+            save_path = saver.save(sess, model_path)
 
     # Save model weights to disk
     save_path = saver.save(sess, model_path)
