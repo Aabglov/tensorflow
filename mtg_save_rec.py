@@ -45,17 +45,17 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.001
 N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
-LSTM_SIZE = 256
+LSTM_SIZE = 512
 NUM_LAYERS = 3
 NUM_STEPS = 10
 #BATCH_SIZE = 100
 NUM_STEPS = 10
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 10000
 MINI_BATCH_LEN = 100
-DISPLAY_STEP = 10
+DISPLAY_STEP = 100
 MAX_LENGTH = 150
 
 graph = tf.Graph()
@@ -92,7 +92,7 @@ with graph.as_default():
 
     losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
     cost = tf.reduce_mean(losses)
-    optimizer = tf.train.AdagradOptimizer(LEARNING_RATE).minimize(cost)
+    optimizer = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
 
     # Accuracy
     #correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
@@ -156,14 +156,11 @@ with tf.Session(graph=graph) as sess:
 
     # Training cycle
     for epoch in range(NUM_EPOCHS):
-        avg_cost = 0
-        for b in range(MINI_BATCH_LEN):
-            #batch_x, batch_y = WH.TrainBatches.next()
-            batch_x,batch_y = WH.TrainBatches.next_card_id(NUM_STEPS)
-            # Run optimization op (backprop) and cost op (to get loss value)
-            _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y})
-            avg_cost += c
-        avg_cost /= MINI_BATCH_LEN
+        #batch_x, batch_y = WH.TrainBatches.next()
+        batch_x,batch_y = WH.TrainBatches.next_card_id(NUM_STEPS)
+        # Run optimization op (backprop) and cost op (to get loss value)
+        _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y})
+        avg_cost = c/NUM_STEPS
         # Display logs per epoch step
         if epoch % DISPLAY_STEP == 0:
             print(" ") # Spacer
