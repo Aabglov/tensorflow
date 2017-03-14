@@ -61,7 +61,7 @@ graph = tf.Graph()
 with graph.as_default():
     # Placeholders
     x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
-    y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
+    y = tf.placeholder(tf.int32, [None,], name='labels_placeholder')
     dropout_prob = tf.placeholder(tf.float32)
 
     # Get dynamic batch_size
@@ -84,11 +84,11 @@ with graph.as_default():
 
     #Predictions, loss, training step
     with tf.variable_scope('softmax'):
-        W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
+        W = tf.get_variable('W', [NUM_STEPS*LSTM_SIZE, N_CLASSES])
         b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
     logits = tf.reshape(
-                tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
-                [batch_size, NUM_STEPS, N_CLASSES])
+                tf.matmul(tf.reshape(rnn_outputs, [-1, NUM_STEPS*LSTM_SIZE]), W) + b,
+                [batch_size, N_CLASSES])
     pred = tf.nn.softmax(logits)
 
     losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
@@ -135,10 +135,10 @@ with tf.Session(graph=graph) as sess:
             batch_x, batch_y = WH.TestBatches.next_card_id(NUM_STEPS)#.next()
             p = sess.run([pred], feed_dict={x: batch_x, y: batch_y, dropout_prob: 1.0})[0]
             for k in p:
-                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=k[-1])[0]
+                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=k)[0]
                 preds.append(pred_letter)
             for l in batch_y:
-                true.append(WH.vocab.id2char(l[-1]))
+                true.append(WH.vocab.id2char(l))
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
 
@@ -150,7 +150,7 @@ with tf.Session(graph=graph) as sess:
             sample = []
             for _ in range(100):
                 p = sess.run([pred], feed_dict={x: np.array(start).reshape((1,NUM_STEPS)), dropout_prob: 1.0})[0]
-                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
+                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0])[0]
                 pred_id = WH.vocab.char2id(pred_letter)
                 start = start[1:NUM_STEPS] + [pred_id]
                 sample.append(pred_letter)
