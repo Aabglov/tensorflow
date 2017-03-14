@@ -52,7 +52,6 @@ LSTM_SIZE = 512
 NUM_LAYERS = 3
 NUM_STEPS = 10
 #BATCH_SIZE = 100
-NUM_STEPS = 10
 NUM_EPOCHS = 10000
 MINI_BATCH_LEN = 100
 DISPLAY_STEP = 100
@@ -63,6 +62,7 @@ with graph.as_default():
     # Placeholders
     x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
     y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
+    dropout_prob = tf.placeholder(tf.float32)
 
     # Get dynamic batch_size
     batch_size = tf.shape(x)[0]
@@ -76,7 +76,8 @@ with graph.as_default():
     #stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
     #rnn_outputs, final_state = tf.nn.dynamic_rnn(stacked_lstm, rnn_inputs, initial_state=init_state)
     lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
-    stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS)
+    dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
+    stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
     rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
                                                  inputs=rnn_inputs,
                                                  initial_state=stacked_lstm.zero_state(batch_size,tf.float32))
@@ -104,44 +105,6 @@ with graph.as_default():
     saver = tf.train.Saver()
 
 
-# with graph.as_default():
-#     # tf Graph input
-#     x = tf.placeholder(tf.float32, [None,  N_INPUT])
-#     y = tf.placeholder(tf.float32, [None, N_CLASSES])
-#
-#     # Define weights
-#     weights = {
-#         'out': tf.Variable(tf.random_normal([LSTM_SIZE,  N_CLASSES]))
-#     }
-#     biases = {
-#         'out': tf.Variable(tf.random_normal([N_CLASSES]))
-#     }
-#
-#     def model(x, weights, biases):
-#         # Cell definition
-#         lstm = tf.contrib.rnn.BasicLSTMCell(LSTM_SIZE, state_is_tuple=True)
-#         # Full model definition
-#         stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm] * NUM_LAYERS, state_is_tuple=True)
-#         outputs, states = tf.contrib.rnn.static_rnn(stacked_lstm, [x], dtype=tf.float32)
-#         # Linear activation, using rnn inner loop last output
-#         return tf.matmul(outputs[-1], weights['out']) + biases['out']
-#
-#     # The return of our model
-#     out = model(x, weights, biases)
-#     # Create the softmax vector for prediction comparison
-#     pred = tf.nn.softmax(logits=out)
-#     # Define loss and optimizer
-#     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out, labels=y))
-#     optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(cost)
-#     # Test model
-#     correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-#     # Calculate accuracy
-#     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-#     # Initializing the variables
-#     init = tf.global_variables_initializer()
-#     # 'Saver' op to save and restore all the variables
-#     saver = tf.train.Saver()
-
 print("Beginning Session")
 #Running first session
 with tf.Session(graph=graph) as sess:
@@ -159,7 +122,7 @@ with tf.Session(graph=graph) as sess:
         #batch_x, batch_y = WH.TrainBatches.next()
         batch_x,batch_y = WH.TrainBatches.next_card_id(NUM_STEPS)
         # Run optimization op (backprop) and cost op (to get loss value)
-        _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y})
+        _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y, dropout_prob: 0.5})
         avg_cost = c/NUM_STEPS
         # Display logs per epoch step
         if epoch % DISPLAY_STEP == 0:
@@ -170,14 +133,28 @@ with tf.Session(graph=graph) as sess:
             true = []
             #for b in range(MINI_BATCH_LEN):
             batch_x, batch_y = WH.TestBatches.next_card_id(NUM_STEPS)#.next()
-            p = sess.run([pred], feed_dict={x: batch_x, y: batch_y})[0]
+            p = sess.run([pred], feed_dict={x: batch_x, y: batch_y, dropout_prob: 1.0})[0]
             for k in p:
-                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=k[0])[0]
+                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=k[-1])[0]
                 preds.append(pred_letter)
             for l in batch_y:
-                true.append(WH.vocab.id2char(l[0]))
+                true.append(WH.vocab.id2char(l[-1]))
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
+
+            seed = u"»|5creature"
+            start = []#np.array([WH.vocab.go]).reshape((1,1)) # 0 is our go character
+            for i in range(NUM_STEPS):
+                start.append(WH.vocab.char2id(seed[i]))
+
+            sample = []
+            for _ in range(100):
+                p = sess.run([pred], feed_dict={x: np.array(start).reshape((1,NUM_STEPS)), dropout_prob: 1.0})[0]
+                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
+                pred_id = WH.vocab.char2id(pred_letter)
+                start = start[1:NUM_STEPS] + [pred_id]
+                sample.append(pred_letter)
+            print("SAMPLE: {}".format(seed[:NUM_STEPS] + ''.join(sample)))
             save_path = saver.save(sess, model_path)
 
     # Save model weights to disk

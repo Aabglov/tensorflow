@@ -78,8 +78,8 @@ class BatchGenerator:
 
 
     def next_card_id(self, num_steps):
-        x = np.array([[self.vocab.char2id(b) for b in self.current_batch[i:i+num_steps]] for i in range(len(self.current_batch) - 2 * num_steps)])
-        y = np.array([[self.vocab.char2id(b) for b in self.current_batch[i:i+num_steps]] for i in range(num_steps,len(self.current_batch) - num_steps)])
+        x = np.array([[self.vocab.char2id(b) for b in self.current_batch[i:i+num_steps]] for i in range(len(self.current_batch) - num_steps)])
+        y = np.array([[self.vocab.char2id(b) for b in self.current_batch[i:i+num_steps]] for i in range(1,len(self.current_batch) - num_steps + 1)]) # The +1 includes the final character
 
         # Increase the batch index
         self.batch_index += 1
