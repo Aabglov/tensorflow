@@ -5,25 +5,27 @@ import numpy as np # Used for One-hot encoding
 
 
 class Vocabulary:
-    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_eos=u'\xa4'):
+    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8', custom_eos=u'\xa4'):
         if not vocab:
             # DEFAULT MAGIC THE GATHERING VOCABULARY
             self.vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
                      '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
                      '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xa4']
+                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac', u'\xf8', u'\xa4']
         else:
             self.vocab = vocab
 
         # Set characters
         self.go_char = custom_go
         self.unk_char = custom_unk
+        self.pad_char = custom_pad
         self.eos_char = custom_eos
-        for c in [custom_go,custom_unk,custom_eos]:
+        for c in [custom_go,custom_unk,custom_pad,custom_eos]:
             if c not in self.vocab:
                 self.vocab.append(c)
         self.eos = self.vocab.index(self.eos_char)
         self.go = self.vocab.index(self.go_char)
+        self.pad = self.vocab.index(self.pad_char)
         self.unk = self.vocab.index(self.unk_char)
 
         # Set values to class
@@ -70,7 +72,8 @@ class BatchGenerator:
         self.vocab = vocab # Vocabulary class
         # Set up batch generator
         self.batch_index = 0
-        self.current_batch = self.batches[0]
+        self.current_batch = self.batches[0] # single batch generation
+        self.current_batches = [] # multiple batch prediction
         # The letter index only applies to
         # this particular dataset
         self.letter_index = 0
@@ -87,6 +90,38 @@ class BatchGenerator:
         self.batch_index = self.batch_index % self.num_batches
         self.current_batch = self.batches[self.batch_index]
         return x,y
+
+    def next_card_batch(self, batch_size):
+        # This will be the maximum batch length among all our batches
+        max_len = 0
+        # Add batch_size number of batches to our current_batches list
+        for b in range(batch_size):
+            # Set maximum batch lenght
+            max_len = max(max_len,len(self.current_batch))
+            self.current_batches.append(self.current_batch)
+            self.batch_index += 1
+            self.batch_index = self.batch_index % self.num_batches
+            self.current_batch = self.batches[self.batch_index]
+
+        batch_collection = []
+        for b in self.current_batches:
+            batch = []
+            for i in range(max_len):
+                try:
+                    # Attempt to get the character in batch b at position i
+                    c = b[i]
+                # If this fails it's because max_len is longer than this batch.
+                # In this case we'll return a padding character to go after
+                # the EOS
+                except IndexError as e:
+                    c = self.vocab.pad_char
+                # Add the character to the batch
+                batch.append(self.vocab.char2id(c))
+            batch_collection.append(batch)
+
+        # Reset the current_batches.
+        self.current_batches = []
+        return np.array(batch_collection)
 
     def next_card(self):
         # X is a one-hot encoded vector of the corresponding card
@@ -131,7 +166,7 @@ class BatchGenerator:
 
 
 class WordHelper:
-    def __init__(self,raw_text,vocab_list=None, custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_eos=u'\xa4', split_ratio=[0.7,0.15,0.15]):
+    def __init__(self,raw_text,vocab_list=None, custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8' ,custom_eos=u'\xa4', split_ratio=[0.7,0.15,0.15]):
 
         self.train_batches = []
         self.test_batches = []
@@ -180,7 +215,7 @@ class WordHelper:
                 pass
 
         # Create our vocabulary object
-        self.vocab = Vocabulary(self.vocab_list,custom_go,custom_unk,custom_eos) # Pass our custom tags
+        self.vocab = Vocabulary(self.vocab_list,custom_go,custom_unk,custom_pad,custom_eos) # Pass our custom tags
 
         # All these batches tryin' to front!
         self.TrainBatches = BatchGenerator(self.train_batches,self.vocab)
