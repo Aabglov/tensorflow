@@ -91,7 +91,7 @@ class BatchGenerator:
         self.current_batch = self.batches[self.batch_index]
         return x,y
 
-    def next_card_batch(self, batch_size):
+    def next_card_batch(self, batch_size, num_steps=1):
         # This will be the maximum batch length among all our batches
         max_len = 0
         # Add batch_size number of batches to our current_batches list
@@ -102,6 +102,10 @@ class BatchGenerator:
             self.batch_index += 1
             self.batch_index = self.batch_index % self.num_batches
             self.current_batch = self.batches[self.batch_index]
+
+        # Ensure our max_len is divisible by num_steps
+        if num_steps > 1:
+            max_len += num_steps - (max_len % num_steps)
 
         batch_collection = []
         for b in self.current_batches:

@@ -11,7 +11,7 @@ import pickle
 
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char.ckpt")
+model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
 data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 
 # Load mtg tokenized data
@@ -50,9 +50,12 @@ N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
 LSTM_SIZE = 512
 NUM_LAYERS = 3
-NUM_STEPS = 1 # Only feeding in one character at a time
-BATCH_SIZE = 12 # Feeding a single character across 12 batches at a time
-NUM_EPOCHS = 100000
+# Why 7?  Including our GO tag 7 is the maximum number of characters
+# we can seed a prediction with using only the card type:
+# »|5land (land being the shortest of the card types)
+NUM_STEPS = 7
+BATCH_SIZE = 1#2 # Feeding a single character across 12 batches at a time
+NUM_EPOCHS = 10000
 MINI_BATCH_LEN = 100
 DISPLAY_STEP = 100
 MAX_LENGTH = 150
@@ -123,24 +126,31 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
+    display_flag = 0
+    total_epochs = 0
     # Training cycle
     for epoch in range(NUM_EPOCHS):
+        total_epochs += 1
         # Generate a batch
         batch = WH.TrainBatches.next_card_batch(BATCH_SIZE)
         # Reset state value
         state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-        for i in range(test_batch.shape[1]-1): # -1 because the y column will come from the 'next' element
+        for i in range(batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
             #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
-            batch_x = batch[:,i].reshape((BATCH_SIZE,1))
-            batch_y = batch[:,i+1]
+            batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+            batch_y = batch[:,i+NUM_STEPS]
             # Run optimization op (backprop) and cost op (to get loss value)
             _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 0.5})
             state = s
+            display_flag += 1
+
+        total_epochs += display_flag
         avg_cost = c/BATCH_SIZE
         # Display logs per epoch step
-        if epoch % DISPLAY_STEP == 0:
+        if display_flag > DISPLAY_STEP:#epoch % DISPLAY_STEP == 0:
+            display_flag = 0
             print(" ") # Spacer
-            print("Epoch:", '%04d' % (epoch+1), "cost=" , "{:.9f}".format(avg_cost))
+            print("Epoch:", '%04d' % (total_epochs), "cost=" , "{:.9f}".format(avg_cost))
             # Test model
             preds = []
             true = []
@@ -152,9 +162,9 @@ with tf.Session(graph=graph) as sess:
             test_batch = WH.TestBatches.next_card_batch(1)
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
             # We iterate over every pair of letters in our test batch
-            for i in range(test_batch.shape[1]-1): # -1 because the y column will come from the 'next' element
-                batch_x = test_batch[0,i].reshape((1,1)) # Reshape to (?,batch_size), in this case (?,1)
-                batch_y = test_batch[0,i+1].reshape((1,)) # Reshape to (?,), in this case (1,)
+            for i in range(test_batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
+                batch_x = test_batch[0,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
+                batch_y = test_batch[0,i+NUM_STEPS].reshape((1,)) # Reshape to (?,), in this case (1,)
                 s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
                 state = s
                 # Choose a letter from our vocabulary based on our output probability: p
@@ -165,15 +175,15 @@ with tf.Session(graph=graph) as sess:
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
 
-            seed = u"»"#"|5creature"
-            start = np.array([WH.vocab.go]).reshape((1,1)) # 0 is our go character
+            seed = u"»|5creature"
+            start = [WH.vocab.char2id(seed[i]) for i in range(NUM_STEPS)]
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
             sample = []
             for _ in range(100):
-                s, p = sess.run([final_state, pred], feed_dict={x: start, init_state: state, dropout_prob: 1.0})
+                s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,NUM_STEPS)), init_state: state, dropout_prob: 1.0})
                 pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0])[0]
                 pred_id = WH.vocab.char2id(pred_letter)
-                start = np.array([pred_id]).reshape((1,1))
+                start = start[1:] + [pred_id]#np.array([pred_id]).reshape((1,1))
                 sample.append(pred_letter)
             print("SAMPLE: {}".format(seed + ''.join(sample)))
             save_path = saver.save(sess, model_path)
