@@ -53,8 +53,8 @@ NUM_LAYERS = 3
 # Why 7?  Including our GO tag 7 is the maximum number of characters
 # we can seed a prediction with using only the card type:
 # »|5land (land being the shortest of the card types)
-NUM_STEPS = 7
-BATCH_SIZE = 1#2 # Feeding a single character across 12 batches at a time
+NUM_STEPS = 1#7
+BATCH_SIZE = 30 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 10000
 MINI_BATCH_LEN = 100
 DISPLAY_STEP = 100
@@ -132,7 +132,7 @@ with tf.Session(graph=graph) as sess:
     for epoch in range(NUM_EPOCHS):
         total_epochs += 1
         # Generate a batch
-        batch = WH.TrainBatches.next_card_batch(BATCH_SIZE)
+        batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
         # Reset state value
         state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
         for i in range(batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
@@ -159,12 +159,12 @@ with tf.Session(graph=graph) as sess:
             # We no longer use BATCH_SIZE here because
             # in the test method we only want to compare
             # one card output to one card prediction
-            test_batch = WH.TestBatches.next_card_batch(1)
+            test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
             # We iterate over every pair of letters in our test batch
             for i in range(test_batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
-                batch_x = test_batch[0,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                batch_y = test_batch[0,i+NUM_STEPS].reshape((1,)) # Reshape to (?,), in this case (1,)
+                batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
+                batch_y = test_batch[:,i+NUM_STEPS].reshape((1,)) # Reshape to (?,), in this case (1,)
                 s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
                 state = s
                 # Choose a letter from our vocabulary based on our output probability: p

@@ -50,7 +50,7 @@ N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
 LSTM_SIZE = 512
 NUM_LAYERS = 3
-NUM_STEPS = 10
+NUM_STEPS = 7
 #BATCH_SIZE = 100
 NUM_EPOCHS = 100000
 MINI_BATCH_LEN = 100
@@ -142,7 +142,7 @@ with tf.Session(graph=graph) as sess:
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
 
-            seed = u"»|5creature"
+            seed = u"»|5creature|4|6angel"[:NUM_STEPS]
             start = []#np.array([WH.vocab.go]).reshape((1,1)) # 0 is our go character
             for i in range(NUM_STEPS):
                 start.append(WH.vocab.char2id(seed[i]))
