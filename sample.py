@@ -45,23 +45,12 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 0.002#0.001
-DECAY_RATE = 0.97
-GRAD_CLIP = 5.0
-
+LEARNING_RATE = 0.001
 N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
 N_CLASSES = WH.vocab.vocab_size # Number of possible characters
 LSTM_SIZE = 128#512
 NUM_LAYERS = 2#3
-# Why 7?  Including our GO tag 7 is the maximum number of characters
-# we can seed a prediction with using only the card type:
-# »|5land (land being the shortest of the card types)
-NUM_STEPS = 30
-BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
-NUM_EPOCHS = 1000
-MINI_BATCH_LEN = 100
-DISPLAY_STEP = 100
-MAX_LENGTH = 150
+NUM_STEPS = 1
 
 graph = tf.Graph()
 with graph.as_default():
@@ -109,13 +98,7 @@ with graph.as_default():
 
     losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
     cost = tf.reduce_mean(losses)
-
-    lr = tf.Variable(0.0, trainable=False)
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
-    with tf.name_scope('optimizer'):
-        op = tf.train.AdamOptimizer(lr)
-    optimizer = op.apply_gradients(zip(grads, tvars))
+    optimizer = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
 
     # Initialize variables
     init = tf.global_variables_initializer()
@@ -135,61 +118,16 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    display_flag = 0
-    total_epochs = 0
-    # Training cycle
-    for epoch in range(NUM_EPOCHS):
-        total_epochs += 1
-        # Set learning rate
-        sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-        # Generate a batch
-        batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
-        # Reset state value
-        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-        for i in range(batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
-            #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
-            batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-            batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-            # Run optimization op (backprop) and cost op (to get loss value)
-            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
-            state = s
-            display_flag += 1
-
-        total_epochs += display_flag
-        avg_cost = c/(batch.shape[1] // NUM_STEPS)
-        # Display logs per epoch step
-        if display_flag > DISPLAY_STEP:#epoch % DISPLAY_STEP == 0:
-            display_flag = 0
-            print(" ") # Spacer
-            print("Epoch:", '%04d' % (total_epochs), "cost=" , "{:.9f}".format(avg_cost))
-            # Test model
-            preds = []
-            true = []
-
-
-            # We no longer use BATCH_SIZE here because
-            # in the test method we only want to compare
-            # one card output to one card prediction
-            test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
-            state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-            # We iterate over every pair of letters in our test batch
-            for i in range(test_batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
-                batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
-                s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
-                state = s
-                # Choose a letter from our vocabulary based on our output probability: p
-                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[-1][0])[0]
-                preds.append(pred_letter)
-            for l in test_batch[0][1:]: # Test batch is 2D so the 0 gets the first (only) line and the first charater is never preidcted (GO) so we omit it as well
-                true.append(WH.vocab.id2char(l))
-            # Add spacing back so display will match
-            preds = ["_"] * (NUM_STEPS-1) + preds
-            print("PRED: {}".format(''.join(preds)))
-            print("TRUE: {}".format(''.join(true)))
-
-            save_path = saver.save(sess, model_path)
-
-    # Save model weights to disk
-    save_path = saver.save(sess, model_path)
-    print("Model saved in file: %s" % save_path)
+    seed = u"»"#"|5creature"
+    start = [WH.vocab.char2id(seed[i]) for i in range(NUM_STEPS)]
+    print("START: {}".format(start))
+    state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+    sample = []
+    for _ in range(100):
+        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,NUM_STEPS)), init_state: state, dropout_prob: 1.0})
+        pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
+        pred_id = WH.vocab.char2id(pred_letter)
+        start = [pred_id]#np.array([pred_id]).reshape((1,1))
+        state = s
+        sample.append(pred_letter)
+    print("SAMPLE: {}".format(seed + ''.join(sample)))
