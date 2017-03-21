@@ -49,8 +49,8 @@ args = {
     'grad_clip':0.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
-    'lstm_size':128,#512
-    'num_layers':2,#3
+    'lstm_size':512,
+    'num_layers':3,
     'num_steps':1
 }
 # Network Parameters

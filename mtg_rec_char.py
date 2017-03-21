@@ -165,7 +165,7 @@ with tf.Session(graph=graph) as sess:
             display_flag += 1
 
         total_epochs += display_flag
-        avg_cost = c/(batch.shape[1] // NUM_STEPS)
+        avg_cost = c/(NUM_STEPS)
         # Display logs per epoch step
         if display_flag > DISPLAY_STEP:#epoch % DISPLAY_STEP == 0:
             display_flag = 0
