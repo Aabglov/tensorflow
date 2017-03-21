@@ -44,24 +44,27 @@ except Exception as e:
         pickle.dump(WH,f)
 
 
-# Network Parameters
-LEARNING_RATE = 0.002#0.001
-DECAY_RATE = 0.97
-GRAD_CLIP = 5.0
+args = {
+    'learning_rate':0.002,#0.001
+    'decay_rate':0.97,
+    'grad_clip':5.0,
+    'n_input':WH.vocab.vocab_size,
+    'n_classes':WH.vocab.vocab_size,
+    'lstm_size':128,#512
+    'num_layers':2,#3
+    'num_steps':30
+}
 
-N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
-N_CLASSES = WH.vocab.vocab_size # Number of possible characters
-LSTM_SIZE = 128#512
-NUM_LAYERS = 2#3
-# Why 7?  Including our GO tag 7 is the maximum number of characters
-# we can seed a prediction with using only the card type:
-# »|5land (land being the shortest of the card types)
-NUM_STEPS = 30
-BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
-NUM_EPOCHS = 1000
-MINI_BATCH_LEN = 100
-DISPLAY_STEP = 100
-MAX_LENGTH = 150
+
+# Network Parameters
+LEARNING_RATE = args['learning_rate']
+DECAY_RATE = args['decay_rate']
+GRAD_CLIP = args['grad_clip']
+N_INPUT = args['n_input']
+N_CLASSES = args['n_classes']
+LSTM_SIZE = args['lstm_size']
+NUM_LAYERS = args['num_layers']
+NUM_STEPS = args['num_steps']
 
 graph = tf.Graph()
 with graph.as_default():
@@ -84,8 +87,6 @@ with graph.as_default():
 
     # Get dynamic batch_size
     batch_size = tf.shape(x)[0]
-
-
 
     #Inputs
     rnn_inputs = tf.one_hot(x, N_CLASSES)
@@ -123,11 +124,18 @@ with graph.as_default():
     saver = tf.train.Saver()
 
 
+
 print("Beginning Session")
+#  TRAINING Parameters
+BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
+NUM_EPOCHS = 1000
+DISPLAY_STEP = 100
+
 #Running first session
 with tf.Session(graph=graph) as sess:
     # Initialize variables
-    sess.run(init)
+    #sess.run(init)
+    sess.run(tf.global_variables_initializer())
 
     try:
         saver.restore(sess, model_path)
@@ -146,9 +154,10 @@ with tf.Session(graph=graph) as sess:
         batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
         # Reset state value
         state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-        for i in range(batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
+        for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
             #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
             batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+            #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
             batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
             # Run optimization op (backprop) and cost op (to get loss value)
             _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
@@ -171,20 +180,21 @@ with tf.Session(graph=graph) as sess:
             # in the test method we only want to compare
             # one card output to one card prediction
             test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
+            print("test_batch shape: {}".format(test_batch.shape))
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
             # We iterate over every pair of letters in our test batch
-            for i in range(test_batch.shape[1] -NUM_STEPS): # -1 because the y column will come from the 'next' element
+            for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
                 batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
                 batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
                 s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
                 state = s
                 # Choose a letter from our vocabulary based on our output probability: p
-                pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[-1][0])[0]
-                preds.append(pred_letter)
-            for l in test_batch[0][1:]: # Test batch is 2D so the 0 gets the first (only) line and the first charater is never preidcted (GO) so we omit it as well
-                true.append(WH.vocab.id2char(l))
-            # Add spacing back so display will match
-            preds = ["_"] * (NUM_STEPS-1) + preds
+                for j in p:
+                    pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                    preds.append(pred_letter)
+                for l in range(batch_y.shape[1]):
+                    true.append(WH.vocab.id2char(batch_y[0][l]))
+
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
 

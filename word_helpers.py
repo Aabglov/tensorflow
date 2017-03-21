@@ -107,6 +107,16 @@ class BatchGenerator:
         if num_steps > 1:
             max_len += num_steps - (max_len % num_steps)
 
+        # Add Spacer
+        # This one is a little weird at first, but it makes sense.
+        # We end up iterating over this batch by NUM_STEPS and
+        # because we need the "next" letter to populate
+        # our target (y) value we need an extra (+1).
+        # The second +1 comes from the way I've set up the loop
+        # and the fact that python is 0-indexed.
+        # See mtg_rec_char.py for a better idea.
+        max_len += 2
+
         batch_collection = []
         for b in self.current_batches:
             batch = []

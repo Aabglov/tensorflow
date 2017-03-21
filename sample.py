@@ -8,7 +8,6 @@ import os
 import word_helpers
 import pickle
 
-
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
@@ -44,13 +43,25 @@ except Exception as e:
         pickle.dump(WH,f)
 
 
+args = {
+    'learning_rate':0.000,#0.001
+    'decay_rate':1.0,
+    'grad_clip':0.0,
+    'n_input':WH.vocab.vocab_size,
+    'n_classes':WH.vocab.vocab_size,
+    'lstm_size':128,#512
+    'num_layers':2,#3
+    'num_steps':1
+}
 # Network Parameters
-LEARNING_RATE = 0.001
-N_INPUT = WH.vocab.vocab_size # One-hot encoded letter
-N_CLASSES = WH.vocab.vocab_size # Number of possible characters
-LSTM_SIZE = 128#512
-NUM_LAYERS = 2#3
-NUM_STEPS = 1
+LEARNING_RATE = args['learning_rate']
+DECAY_RATE = args['decay_rate']
+GRAD_CLIP = args['grad_clip']
+N_INPUT = args['n_input']
+N_CLASSES = args['n_classes']
+LSTM_SIZE = args['lstm_size']
+NUM_LAYERS = args['num_layers']
+NUM_STEPS = args['num_steps']
 
 graph = tf.Graph()
 with graph.as_default():
@@ -74,8 +85,6 @@ with graph.as_default():
     # Get dynamic batch_size
     batch_size = tf.shape(x)[0]
 
-
-
     #Inputs
     rnn_inputs = tf.one_hot(x, N_CLASSES)
 
@@ -98,7 +107,13 @@ with graph.as_default():
 
     losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
     cost = tf.reduce_mean(losses)
-    optimizer = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
+
+    lr = tf.Variable(0.0, trainable=False)
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
+    with tf.name_scope('optimizer'):
+        op = tf.train.AdamOptimizer(lr)
+    optimizer = op.apply_gradients(zip(grads, tvars))
 
     # Initialize variables
     init = tf.global_variables_initializer()
@@ -106,7 +121,7 @@ with graph.as_default():
     saver = tf.train.Saver()
 
 
-print("Beginning Session")
+print("Beginning Model Initialization")
 #Running first session
 with tf.Session(graph=graph) as sess:
     # Initialize variables
@@ -118,16 +133,24 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    seed = u"»"#"|5creature"
-    start = [WH.vocab.char2id(seed[i]) for i in range(NUM_STEPS)]
-    print("START: {}".format(start))
+    seed = u"»|5creature|4|6angel"
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-    sample = []
-    for _ in range(100):
-        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,NUM_STEPS)), init_state: state, dropout_prob: 1.0})
+    sample = [seed[0]]
+    start = [WH.vocab.char2id(seed[0])]
+    for i in range(1,len(seed)):
+        s = sess.run(final_state, feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: 1.0})
+        start = [WH.vocab.char2id(seed[i])]
+        sample.append(seed[i])
+        state = s
+
+    #for _ in range(100):
+    pred_letter = ""
+    print(WH.vocab.vocab[-1])
+    while pred_letter != WH.vocab.vocab[-1]:
+        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: 1.0})
         pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
         pred_id = WH.vocab.char2id(pred_letter)
-        start = [pred_id]#np.array([pred_id]).reshape((1,1))
+        start = [pred_id]
         state = s
         sample.append(pred_letter)
-    print("SAMPLE: {}".format(seed + ''.join(sample)))
+    print("SAMPLE: {}".format(''.join(sample)))
