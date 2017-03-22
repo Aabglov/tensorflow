@@ -128,8 +128,8 @@ with graph.as_default():
 print("Beginning Session")
 #  TRAINING Parameters
 BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
-NUM_EPOCHS = 1000
-DISPLAY_STEP = 100
+NUM_EPOCHS = 10000
+DISPLAY_STEP = 10
 
 #Running first session
 with tf.Session(graph=graph) as sess:
@@ -143,11 +143,8 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    display_flag = 0
-    total_epochs = 0
     # Training cycle
     for epoch in range(NUM_EPOCHS):
-        total_epochs += 1
         # Set learning rate
         sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
         # Generate a batch
@@ -160,21 +157,17 @@ with tf.Session(graph=graph) as sess:
             #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
             batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
             # Run optimization op (backprop) and cost op (to get loss value)
-            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 0.5})
             state = s
-            display_flag += 1
 
-        total_epochs += display_flag
-        avg_cost = c/(NUM_STEPS)
+        avg_cost = c/BATCH_SIZE/NUM_STEPS
+        print(" ") # Spacer
+        print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost))
         # Display logs per epoch step
-        if display_flag > DISPLAY_STEP:#epoch % DISPLAY_STEP == 0:
-            display_flag = 0
-            print(" ") # Spacer
-            print("Epoch:", '%04d' % (total_epochs), "cost=" , "{:.9f}".format(avg_cost))
+        if epoch % DISPLAY_STEP == 0:
             # Test model
             preds = []
             true = []
-
 
             # We no longer use BATCH_SIZE here because
             # in the test method we only want to compare
@@ -197,7 +190,6 @@ with tf.Session(graph=graph) as sess:
 
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
-
             save_path = saver.save(sess, model_path)
 
     # Save model weights to disk
