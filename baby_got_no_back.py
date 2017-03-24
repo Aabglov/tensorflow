@@ -101,5 +101,5 @@ for iter in range(iterations):
         break
 
     sys.stdout.write("\rIter:" + str(iter) + " Loss:" + str(error))
-    if(iter % 100 == 99):
+    if(iter % 10 == 9):
         print("")

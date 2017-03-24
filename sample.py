@@ -10,7 +10,7 @@ import pickle
 
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
+checkpoint_path = os.path.join(dir_path,"saved","mtg")#,"mtg_rec_char_steps.ckpt")
 data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 
 # Load mtg tokenized data
@@ -86,7 +86,8 @@ with graph.as_default():
     batch_size = tf.shape(x)[0]
 
     #Inputs
-    rnn_inputs = tf.one_hot(x, N_CLASSES)
+    embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
+    rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
     # RNN
     lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
@@ -128,12 +129,14 @@ with tf.Session(graph=graph) as sess:
     sess.run(init)
 
     try:
-        saver.restore(sess, model_path)
-        print("Model restored from file: %s" % model_path)
+        ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+        saver.restore(sess, ckpt.model_checkpoint_path)
+        print("Model restored from file: %s" % checkpoint_path)
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    seed = u"»|5creature|4|6angel"
+    seed = u"»|5creature|4|6angel|7|8"
+    #seed = u"»|5planeswalker|4|6"
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
     sample = [seed[0]]
     start = [WH.vocab.char2id(seed[0])]
@@ -145,7 +148,6 @@ with tf.Session(graph=graph) as sess:
 
     #for _ in range(100):
     pred_letter = ""
-    print(WH.vocab.vocab[-1])
     while pred_letter != WH.vocab.vocab[-1]:
         s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: 1.0})
         pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
@@ -153,4 +155,6 @@ with tf.Session(graph=graph) as sess:
         start = [pred_id]
         state = s
         sample.append(pred_letter)
+        if len(sample) > 500:
+            break
     print("SAMPLE: {}".format(''.join(sample)))

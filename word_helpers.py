@@ -80,17 +80,6 @@ class BatchGenerator:
         self.num_batches = len(self.batches)
 
 
-    def next_card_id(self, num_steps):
-        x = np.array([[self.vocab.char2id(b) for b in self.current_batch[i:i+num_steps]] for i in range(len(self.current_batch) - num_steps)])
-        # The double brackets here ensure we get an array of shape (?,) instead of (1,)
-        y = np.array([self.vocab.char2id(self.current_batch[i]) for i in range(num_steps,len(self.current_batch))])
-
-        # Increase the batch index
-        self.batch_index += 1
-        self.batch_index = self.batch_index % self.num_batches
-        self.current_batch = self.batches[self.batch_index]
-        return x,y
-
     def next_card_batch(self, batch_size, num_steps=1):
         # This will be the maximum batch length among all our batches
         max_len = 0
@@ -136,18 +125,6 @@ class BatchGenerator:
         # Reset the current_batches.
         self.current_batches = []
         return np.array(batch_collection)
-
-    def next_card(self):
-        # X is a one-hot encoded vector of the corresponding card
-        # Y is also an one-hot encoded vector (of the output card)
-        x = [self.vocab.id2onehot(self.vocab.char2id(b)) for b in self.current_batch[:-1]] # Don't inclue the EOS tag
-        y = [self.vocab.id2onehot(self.vocab.char2id(b)) for b in self.current_batch[1:]]  # Don't include the GO tag
-
-        # Increase the batch index
-        self.batch_index += 1
-        self.batch_index = self.batch_index % self.num_batches
-        self.current_batch = self.batches[self.batch_index]
-        return x,y
 
     def next(self):
         # X is a one-hot encoded vector of the corresponding character
