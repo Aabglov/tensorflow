@@ -49,7 +49,7 @@ args = {
     'grad_clip':0.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
-    'lstm_size':512,
+    'lstm_size':256,
     'num_layers':3,
     'num_steps':1
 }

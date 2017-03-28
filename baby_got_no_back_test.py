@@ -60,13 +60,13 @@ class DNI(object):
 
 np.random.seed(1)
 
-num_examples = 1000
+num_examples = 2000#1000
 output_dim = 12
 iterations = 1000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
-batch_size = 1000
+batch_size = 100#1000
 alpha = 0.0001
 
 input_dim = len(x[0])
@@ -85,12 +85,19 @@ for iter in range(iterations):
         batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
         batch_y = y[(batch_i * batch_size):(batch_i+1)*batch_size]
 
+        #print(x.shape)
+        #print(y.shape)
+        #print(batch_x.shape)
+        #print(batch_y.shape)
+        #print(int(len(x) / batch_size))
+        #HODOR
+
         _, layer_1_out = layer_1.forward_and_synthetic_update(batch_x)
         layer_1_delta, layer_2_out = layer_2.forward_and_synthetic_update(layer_1_out)
         layer_2_delta, layer_3_out = layer_3.forward_and_synthetic_update(layer_2_out)
 
         layer_3_delta = layer_3_out - batch_y
-        print(layer_1_delta)
+    
         layer_3.update_synthetic_weights(layer_3_delta)
         layer_2.update_synthetic_weights(layer_2_delta)
         layer_1.update_synthetic_weights(layer_1_delta)
@@ -99,9 +106,28 @@ for iter in range(iterations):
 
     if(error < 0.1):
         sys.stdout.write("\rIter:" + str(iter) + " Loss:" + str(error))
-        print(layer_3_delta)
+        print(x[0])
+
+        _, pred_1_out = layer_1.forward_and_synthetic_update(x[0].reshape((1,24)))
+        _, pred_2_out = layer_2.forward_and_synthetic_update(pred_1_out)
+        _, pred_3_out = layer_3.forward_and_synthetic_update(pred_2_out)
+        
+        bin_rep = ''.join([str(int(i)) for i in x[0]])
+        x1 = bin_rep[:output_dim]
+        x2 = bin_rep[output_dim:]
+        bin_y = ''.join([str(int(i)) for i in y[0]])
+        bin_pred = ''.join([str(int(i)) for i in pred_3_out[0]])
+
+        print("x1: {}".format(x1))
+        print("x2: {}".format(x2))
+        print("y   : {}".format(bin_y))
+        print("pred: {}".format(bin_pred))
+
+        
         break
 
     sys.stdout.write("\rIter:" + str(iter) + " Loss:" + str(error))
     if(iter % 10 == 9):
         print("")
+
+

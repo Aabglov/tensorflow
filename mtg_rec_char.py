@@ -12,6 +12,7 @@ import time
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
+checkpoint_path = os.path.join(dir_path,"saved","mtg")
 data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
 
 # Load mtg tokenized data
@@ -45,20 +46,18 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':0.002,#0.001
-    'decay_rate':0.97,
+    'learning_rate':2e-3,
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
-    'lstm_size':512, #128
+    'lstm_size':256, #512
     'num_layers':3, #2
-    'num_steps':50
+    'num_steps':200
 }
 
 
 # Network Parameters
 LEARNING_RATE = args['learning_rate']
-DECAY_RATE = args['decay_rate']
 GRAD_CLIP = args['grad_clip']
 N_INPUT = args['n_input']
 N_CLASSES = args['n_classes']
@@ -89,7 +88,9 @@ with graph.as_default():
     batch_size = tf.shape(x)[0]
 
     #Inputs
-    rnn_inputs = tf.one_hot(x, N_CLASSES)
+    #rnn_inputs = tf.one_hot(x, N_CLASSES)
+    embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
+    rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
     # RNN
     lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
@@ -109,7 +110,7 @@ with graph.as_default():
     pred = tf.nn.softmax(logits)
 
     losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-    cost = tf.reduce_mean(losses)
+    cost = tf.reduce_sum(losses)
 
     lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
@@ -130,6 +131,7 @@ print("Beginning Session")
 BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 10000
 DISPLAY_STEP = 10
+DECAY_RATE = 1.0
 
 #Running first session
 with tf.Session(graph=graph) as sess:
@@ -138,13 +140,15 @@ with tf.Session(graph=graph) as sess:
     sess.run(tf.global_variables_initializer())
 
     try:
-        saver.restore(sess, model_path)
+        ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+        saver.restore(sess, ckpt.model_checkpoint_path)
         print("Model restored from file: %s" % model_path)
     except Exception as e:
         print("Model restore failed {}".format(e))
 
     # Training cycle
-    for epoch in range(NUM_EPOCHS):
+    already_trained = 0
+    for epoch in range(already_trained,already_trained+NUM_EPOCHS):
         # Set learning rate
         sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
         # Generate a batch
@@ -162,8 +166,8 @@ with tf.Session(graph=graph) as sess:
             state = s
             end = time.time()
             avg_cost = c/BATCH_SIZE/NUM_STEPS
-            print(" ") # Spacer
             print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
+
         # Display logs per epoch step
         if epoch % DISPLAY_STEP == 0:
             # Test model
@@ -174,7 +178,6 @@ with tf.Session(graph=graph) as sess:
             # in the test method we only want to compare
             # one card output to one card prediction
             test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
-            print("test_batch shape: {}".format(test_batch.shape))
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
             # We iterate over every pair of letters in our test batch
             for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
@@ -188,10 +191,11 @@ with tf.Session(graph=graph) as sess:
                     preds.append(pred_letter)
                 for l in range(batch_y.shape[1]):
                     true.append(WH.vocab.id2char(batch_y[0][l]))
-
+            print(" ") # Spacer
             print("PRED: {}".format(''.join(preds)))
             print("TRUE: {}".format(''.join(true)))
-            save_path = saver.save(sess, model_path)
+            print(" ") # Spacer
+            save_path = saver.save(sess, model_path, global_step = epoch)
 
     # Save model weights to disk
     save_path = saver.save(sess, model_path)
