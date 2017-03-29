@@ -29,7 +29,7 @@ def generate_dataset(output_dim = 8,num_examples=1000):
     return (x,y)
 
 def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+    return 1. / (1. + np.exp(-x))
 
 def sigmoid_out2deriv(out):
     return out * (1 - out)
@@ -50,13 +50,13 @@ class DNI(object):
 
         self.synthetic_gradient = self.output.dot(self.weights_synthetic_grads)
         self.weight_synthetic_gradient = self.synthetic_gradient * self.nonlin_deriv(self.output)
-        self.weights += self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
+        self.weights -= self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
 
         return self.weight_synthetic_gradient.dot(self.weights.T), self.output
 
     def update_synthetic_weights(self,true_gradient):
         self.synthetic_gradient_delta = self.synthetic_gradient - true_gradient
-        self.weights_synthetic_grads += self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
+        self.weights_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
 
 np.random.seed(1)
 
@@ -67,7 +67,7 @@ iterations = 1000
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
 batch_size = 1000
-alpha = 0.0001
+alpha = 0.1
 
 input_dim = len(x[0])
 layer_1_dim = 128
@@ -90,14 +90,14 @@ for iter in range(iterations):
         layer_2_delta, layer_3_out = layer_3.forward_and_synthetic_update(layer_2_out)
 
         layer_3_delta = layer_3_out - batch_y
-        print(layer_1_delta)
+        print(layer_1_delta[0][:5])
         layer_3.update_synthetic_weights(layer_3_delta)
         layer_2.update_synthetic_weights(layer_2_delta)
         layer_1.update_synthetic_weights(layer_1_delta)
 
         error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
 
-    if(error < 0.1):
+    if(error < 1e-50):
         sys.stdout.write("\rIter:" + str(iter) + " Loss:" + str(error))
         print(layer_3_delta)
         break

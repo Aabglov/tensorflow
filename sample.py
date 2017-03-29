@@ -135,7 +135,7 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    seed = u"»|5creature|4|6angel|7|8"
+    seed = u"»|5creature|4legendary|6angel|7|8"
     #seed = u"»|5planeswalker|4|6"
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
     sample = [seed[0]]
