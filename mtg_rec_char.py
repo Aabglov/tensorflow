@@ -50,7 +50,7 @@ args = {
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
-    'lstm_size':256, #512
+    'lstm_size':512,
     'num_layers':3, #2
     'num_steps':200
 }
@@ -132,6 +132,7 @@ BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 10000
 DISPLAY_STEP = 10
 DECAY_RATE = 1.0
+DROPOUT_KEEP_PROB = 0.8
 
 #Running first session
 with tf.Session(graph=graph) as sess:
@@ -147,7 +148,7 @@ with tf.Session(graph=graph) as sess:
         print("Model restore failed {}".format(e))
 
     # Training cycle
-    already_trained = 0
+    already_trained = 18871
     for epoch in range(already_trained,already_trained+NUM_EPOCHS):
         # Set learning rate
         sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
@@ -162,7 +163,7 @@ with tf.Session(graph=graph) as sess:
             #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
             batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
             # Run optimization op (backprop) and cost op (to get loss value)
-            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
             state = s
             end = time.time()
             avg_cost = c/BATCH_SIZE/NUM_STEPS

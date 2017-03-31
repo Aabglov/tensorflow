@@ -37,6 +37,7 @@ class Layer(object):
     def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,alpha):
 
         self.weights = (np.random.randn(input_dim, output_dim) * 0.2) - 0.1
+        self.memory_weights = np.zeros(self.weights.shape)
         self.nonlin = nonlin
         self.nonlin_deriv = nonlin_deriv
         self.alpha = alpha
@@ -51,7 +52,11 @@ class Layer(object):
         return self.weight_output_delta.dot(self.weights.T)
 
     def update(self):
-        self.weights -= self.input.T.dot(self.weight_output_delta) * self.alpha
+        # ADAGRAD
+        grad = self.input.T.dot(self.weight_output_delta)
+        self.memory_weights += (grad ** 2.)
+        self.weights -= (self.alpha * grad) / np.sqrt(self.memory_weights + 1e-6)
+        #self.weights -= self.input.T.dot(self.weight_output_delta) * self.alpha
 
 np.random.seed(1)
 
@@ -61,7 +66,7 @@ iterations = 100000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
-batch_size = 100#0
+batch_size = 10
 alpha = 0.1
 
 input_dim = len(x[0])
@@ -100,7 +105,7 @@ for iter in range(iterations):
     if error < 1.0:
         print("\rIter:" + str(iter) + " Loss:" + str(error))
 
-        pred_1_out = layer_1.forward(x[0].reshape((1,24)))
+        pred_1_out = layer_1.forward(x[0].reshape((1,2*output_dim)))
         pred_2_out = layer_2.forward(pred_1_out)
         pred_3_out = layer_3.forward(pred_2_out)
 
