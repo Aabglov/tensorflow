@@ -148,7 +148,7 @@ with tf.Session(graph=graph) as sess:
         print("Model restore failed {}".format(e))
 
     # Training cycle
-    already_trained = 18871
+    already_trained = 0
     for epoch in range(already_trained,already_trained+NUM_EPOCHS):
         # Set learning rate
         sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
