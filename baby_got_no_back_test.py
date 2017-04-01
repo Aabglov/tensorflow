@@ -48,27 +48,28 @@ class DNI(object):
         self.input = input
         self.output = self.nonlin(self.input.dot(self.weights))
 
-        self.synthetic_gradient = np.maximum(self.output.dot(self.weights_synthetic_grads),5.0)
+        self.synthetic_gradient = self.output.dot(self.weights_synthetic_grads)
         self.weight_synthetic_gradient = self.synthetic_gradient * self.nonlin_deriv(self.output)
-        self.weights += self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
+        self.weights -= self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
 
         return self.weight_synthetic_gradient.dot(self.weights.T), self.output
 
     def update_synthetic_weights(self,true_gradient):
         self.synthetic_gradient_delta = self.synthetic_gradient - true_gradient
-        self.weights_synthetic_grads += self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
+        self.weights_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
+
 
 
 np.random.seed(1)
 
 num_examples = 1000
 output_dim = 12
-iterations = 1000
+iterations = 100000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
-batch_size = 1000
-alpha = 0.0001
+batch_size = 10#00
+alpha = 0.01
 
 input_dim = len(x[0])
 layer_1_dim = 128
@@ -81,6 +82,7 @@ layer_3 = DNI(layer_2_dim, output_dim,sigmoid, sigmoid_out2deriv,alpha)
 
 for iter in range(iterations):
     error = 0
+    total = 0
 
     for batch_i in range(int(len(x) / batch_size)):
         batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
@@ -91,19 +93,22 @@ for iter in range(iterations):
         layer_2_delta, layer_3_out = layer_3.forward_and_synthetic_update(layer_2_out)
 
         layer_3_delta = layer_3_out - batch_y
-        print("")
-        print("layer 1 delta: {}".format(layer_1_delta[0][:5]))
-        print("layer 1 synthetic gradient: {}".format(layer_1.synthetic_gradient[0][:5]))
-        print("layer 1 weights synthetic grads: {}".format(layer_1.weights_synthetic_grads[0][:5]))
-        print("layer 1 weights: {}".format(layer_1.weights[0][:5]))
+        #print("")
+        #print("layer 1 delta: {}".format(layer_1_delta[0][:5]))
+        #print("layer 1 synthetic gradient: {}".format(layer_1.synthetic_gradient[0][:5]))
+        #print("layer 1 weights synthetic grads: {}".format(layer_1.weights_synthetic_grads[0][:5]))
+        #print("layer 1 weights: {}".format(layer_1.weights[0][:5]))
         layer_3.update_synthetic_weights(layer_3_delta)
         layer_2.update_synthetic_weights(layer_2_delta)
         layer_1.update_synthetic_weights(layer_1_delta)
 
-        #error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
-        error += np.sum(layer_3_delta ** 2)
+        error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
+        #error += np.sum(layer_3_delta ** 2)
+        #total += 1
 
-    if(error < 1e-5):
+    #error /= total
+
+    if(error < 1e-3):
         print("\rIter:" + str(iter) + " Loss:" + str(error))
         print(x[0])
 
@@ -111,11 +116,12 @@ for iter in range(iterations):
         _, pred_2_out = layer_2.forward_and_synthetic_update(pred_1_out)
         _, pred_3_out = layer_3.forward_and_synthetic_update(pred_2_out)
 
-        bin_rep = ''.join([str(int(i)) for i in x[0]])
+        bin_rep = ''.join([str(int(round(i))) for i in x[0]])
         x1 = bin_rep[:output_dim]
         x2 = bin_rep[output_dim:]
-        bin_y = ''.join([str(int(i)) for i in y[0]])
-        bin_pred = ''.join([str(int(i)) for i in pred_3_out[0]])
+        bin_y = ''.join([str(int(round(i))) for i in y[0]])
+        bin_pred = ''.join([str(int(round(i))) for i in pred_3_out[0]])
+        #bin_pred = ','.join([str(i) for i in pred_3_out[0]])
 
         print("x1:   {}".format(x1))
         print("x2:   {}".format(x2))

@@ -57,11 +57,11 @@ np.random.seed(1)
 
 num_examples = 1000
 output_dim = 12
-iterations = 100000
+iterations = 1000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
-batch_size = 100#0
+batch_size = 10#00
 alpha = 0.1
 
 input_dim = len(x[0])
@@ -75,6 +75,7 @@ layer_3 = Layer(layer_2_dim, output_dim,sigmoid, sigmoid_out2deriv,alpha)
 
 for iter in range(iterations):
     error = 0
+    #total = 0
 
     for batch_i in range(int(len(x) / batch_size)):
         batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
@@ -94,21 +95,24 @@ for iter in range(iterations):
         layer_2.update()
         layer_3.update()
 
-        #error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
-        error += np.sum(layer_3_delta ** 2.)
+        error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
+        #error += np.sum(layer_3_delta ** 2.)
+        #total += 1
 
-    if error < 1.0:
+    #error /= total
+
+    if error < 1e-2:
         print("\rIter:" + str(iter) + " Loss:" + str(error))
 
         pred_1_out = layer_1.forward(x[0].reshape((1,24)))
         pred_2_out = layer_2.forward(pred_1_out)
         pred_3_out = layer_3.forward(pred_2_out)
 
-        bin_rep = ''.join([str(int(i)) for i in x[0]])
+        bin_rep = ''.join([str(int(round(i))) for i in x[0]])
         x1 = bin_rep[:output_dim]
         x2 = bin_rep[output_dim:]
-        bin_y = ''.join([str(int(i)) for i in y[0]])
-        bin_pred = ''.join([str(int(i)) for i in pred_3_out[0]])
+        bin_y = ''.join([str(int(round(i))) for i in y[0]])
+        bin_pred = ''.join([str(int(round(i))) for i in pred_3_out[0]])
 
         print("x1:   {}".format(x1))
         print("x2:   {}".format(x2))

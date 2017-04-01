@@ -3,11 +3,11 @@ from fractions import gcd
 import numpy as np
 
 pi_ests = []
-for j in range(1000):
+for j in range(1):
     # Simulate D20 rolls
     MIN = 1
-    MAX = 100
-    NUM_ROLLS = 200
+    MAX = 1000000
+    NUM_ROLLS = 200000
 
     coprime = 0
     cofactor = 0
