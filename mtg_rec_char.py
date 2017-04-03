@@ -127,78 +127,79 @@ with tf.device('/cpu:0'):
 
 
 
-print("Beginning Session")
-#  TRAINING Parameters
-BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
-NUM_EPOCHS = 10000
-DISPLAY_STEP = 10
-DECAY_RATE = 1.0
-DROPOUT_KEEP_PROB = 0.8
+    print("Beginning Session")
+    #  TRAINING Parameters
+    BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
+    NUM_EPOCHS = 10000
+    DISPLAY_STEP = 10
+    DECAY_RATE = 1.0
+    DROPOUT_KEEP_PROB = 0.8
 
-#Running first session
-with tf.Session(graph=graph,config=tf.ConfigProto(log_device_placement=True)) as sess:
-    # Initialize variables
-    #sess.run(init)
-    sess.run(tf.global_variables_initializer())
 
-    try:
-        ckpt = tf.train.get_checkpoint_state(checkpoint_path)
-        saver.restore(sess, ckpt.model_checkpoint_path)
-        print("Model restored from file: %s" % model_path)
-    except Exception as e:
-        print("Model restore failed {}".format(e))
+    #Running first session
+    with tf.Session(graph=graph) as sess:
+        # Initialize variables
+        #sess.run(init)
+        sess.run(tf.global_variables_initializer())
 
-    # Training cycle
-    already_trained = 7111
-    for epoch in range(already_trained,already_trained+NUM_EPOCHS):
-        # Set learning rate
-        sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-        # Generate a batch
-        batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
-        # Reset state value
-        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-        for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-            start = time.time()
-            #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
-            batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-            #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
-            batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-            # Run optimization op (backprop) and cost op (to get loss value)
-            _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
-            state = s
-            end = time.time()
-            avg_cost = c/BATCH_SIZE/NUM_STEPS
-            print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
+        try:
+            ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+            saver.restore(sess, ckpt.model_checkpoint_path)
+            print("Model restored from file: %s" % model_path)
+        except Exception as e:
+            print("Model restore failed {}".format(e))
 
-        # Display logs per epoch step
-        if epoch % DISPLAY_STEP == 0:
-            # Test model
-            preds = []
-            true = []
-
-            # We no longer use BATCH_SIZE here because
-            # in the test method we only want to compare
-            # one card output to one card prediction
-            test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
-            state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-            # We iterate over every pair of letters in our test batch
-            for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-                batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
-                s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+        # Training cycle
+        already_trained = 7445
+        for epoch in range(already_trained,already_trained+NUM_EPOCHS):
+            # Set learning rate
+            sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            # Generate a batch
+            batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
+            # Reset state value
+            state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+            for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
+                start = time.time()
+                #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
+                batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
+                batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                # Run optimization op (backprop) and cost op (to get loss value)
+                _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
                 state = s
-                # Choose a letter from our vocabulary based on our output probability: p
-                for j in p:
-                    pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                    preds.append(pred_letter)
-                for l in range(batch_y.shape[1]):
-                    true.append(WH.vocab.id2char(batch_y[0][l]))
-            print(" ") # Spacer
-            print("PRED: {}".format(''.join(preds)))
-            print("TRUE: {}".format(''.join(true)))
-            print(" ") # Spacer
-            save_path = saver.save(sess, model_path, global_step = epoch)
+                end = time.time()
+                avg_cost = c/BATCH_SIZE/NUM_STEPS
+                print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
-    # Save model weights to disk
-    save_path = saver.save(sess, model_path)
-    print("Model saved in file: %s" % save_path)
+            # Display logs per epoch step
+            if epoch % DISPLAY_STEP == 0:
+                # Test model
+                preds = []
+                true = []
+
+                # We no longer use BATCH_SIZE here because
+                # in the test method we only want to compare
+                # one card output to one card prediction
+                test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
+                state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+                # We iterate over every pair of letters in our test batch
+                for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
+                    batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
+                    batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
+                    s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+                    state = s
+                    # Choose a letter from our vocabulary based on our output probability: p
+                    for j in p:
+                        pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                        preds.append(pred_letter)
+                    for l in range(batch_y.shape[1]):
+                        true.append(WH.vocab.id2char(batch_y[0][l]))
+                print(" ") # Spacer
+                print("PRED: {}".format(''.join(preds)))
+                print("TRUE: {}".format(''.join(true)))
+                print(" ") # Spacer
+                save_path = saver.save(sess, model_path, global_step = epoch)
+
+        # Save model weights to disk
+        save_path = saver.save(sess, model_path)
+        print("Model saved in file: %s" % save_path)
