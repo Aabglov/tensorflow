@@ -65,64 +65,65 @@ LSTM_SIZE = args['lstm_size']
 NUM_LAYERS = args['num_layers']
 NUM_STEPS = args['num_steps']
 
-graph = tf.Graph()
-with graph.as_default():
-    # Placeholders
-    x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
-    y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
-    dropout_prob = tf.placeholder(tf.float32)
+with tf.device('/cpu:0'):
+    graph = tf.Graph()
+    with graph.as_default():
+        # Placeholders
+        x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
+        y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
+        dropout_prob = tf.placeholder(tf.float32)
 
-    # Our initial state placeholder:
-    # NUM_LAYERS -- the number of layers used by our stacked LSTM
-    # 2 -- 2 states for each layer (output,hidden)
-    # None -- This will be our batch_size which is flexible
-    # LSTM_SIZE -- the size of our hidden layers
-    init_state = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='state_placeholder')
-    # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
-    l = tf.unstack(init_state, axis=0)
-    rnn_tuple_state = tuple(
-        [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(NUM_LAYERS)]
-    )
+        # Our initial state placeholder:
+        # NUM_LAYERS -- the number of layers used by our stacked LSTM
+        # 2 -- 2 states for each layer (output,hidden)
+        # None -- This will be our batch_size which is flexible
+        # LSTM_SIZE -- the size of our hidden layers
+        init_state = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='state_placeholder')
+        # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
+        l = tf.unstack(init_state, axis=0)
+        rnn_tuple_state = tuple(
+            [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(NUM_LAYERS)]
+        )
 
-    # Get dynamic batch_size
-    batch_size = tf.shape(x)[0]
+        # Get dynamic batch_size
+        batch_size = tf.shape(x)[0]
 
-    #Inputs
-    #rnn_inputs = tf.one_hot(x, N_CLASSES)
-    embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
-    rnn_inputs = tf.nn.embedding_lookup(embedding, x)
+        #Inputs
+        #rnn_inputs = tf.one_hot(x, N_CLASSES)
+        embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
+        rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
-    # RNN
-    lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
-    dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
-    stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
-    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
-                                                 inputs=rnn_inputs,
-                                                 initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+        # RNN
+        lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
+        dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
+        stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
+        rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                     inputs=rnn_inputs,
+                                                     initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
 
-    #Predictions, loss, training step
-    with tf.variable_scope('softmax'):
-        W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
-        b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
-    logits = tf.reshape(
-                tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
-                [-1,batch_size, N_CLASSES])
-    pred = tf.nn.softmax(logits)
+        #Predictions, loss, training step
+        with tf.variable_scope('softmax'):
+            W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
+            b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
+        logits = tf.reshape(
+                    tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
+                    [-1,batch_size, N_CLASSES])
+        pred = tf.nn.softmax(logits)
 
-    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-    cost = tf.reduce_sum(losses)
+        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
+        cost = tf.reduce_sum(losses)
 
-    lr = tf.Variable(0.0, trainable=False)
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
-    with tf.name_scope('optimizer'):
-        op = tf.train.AdamOptimizer(lr)
-    optimizer = op.apply_gradients(zip(grads, tvars))
+        lr = tf.Variable(0.0, trainable=False)
+        tvars = tf.trainable_variables()
+        grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
+        with tf.name_scope('optimizer'):
+            op = tf.train.AdamOptimizer(lr)
+        optimizer = op.apply_gradients(zip(grads, tvars))
 
-    # Initialize variables
-    init = tf.global_variables_initializer()
-    # 'Saver' op to save and restore all the variables
-    saver = tf.train.Saver()
+        # Initialize variables
+        init = tf.global_variables_initializer()
+        # 'Saver' op to save and restore all the variables
+        saver = tf.train.Saver()
 
 
 
@@ -135,7 +136,7 @@ DECAY_RATE = 1.0
 DROPOUT_KEEP_PROB = 0.8
 
 #Running first session
-with tf.Session(graph=graph) as sess:
+with tf.Session(graph=graph,config=tf.ConfigProto(log_device_placement=True)) as sess:
     # Initialize variables
     #sess.run(init)
     sess.run(tf.global_variables_initializer())
@@ -148,7 +149,7 @@ with tf.Session(graph=graph) as sess:
         print("Model restore failed {}".format(e))
 
     # Training cycle
-    already_trained = 0
+    already_trained = 7111
     for epoch in range(already_trained,already_trained+NUM_EPOCHS):
         # Set learning rate
         sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
