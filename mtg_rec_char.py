@@ -46,7 +46,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':2e-3,
+    'learning_rate':3e-4,
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -150,7 +150,7 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 7445
+        already_trained = 13773
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))

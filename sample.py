@@ -121,7 +121,7 @@ with graph.as_default():
     # 'Saver' op to save and restore all the variables
     saver = tf.train.Saver()
 
-
+DROPOUT_KEEP_PROB = 0.9
 print("Beginning Model Initialization")
 #Running first session
 with tf.Session(graph=graph) as sess:
@@ -135,8 +135,9 @@ with tf.Session(graph=graph) as sess:
     except Exception as e:
         print("Model restore failed {}".format(e))
 
-    seed = u"»|5creature|4legendary|6angel|7|8"
+    seed = u"»|5creature|4legendary|6eldrazi|7|8"
     #seed = u"»|5planeswalker|4|6"
+    #seed = u"»|5planeswalker|4|6serra|7"
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
     sample = [seed[0]]
     start = [WH.vocab.char2id(seed[0])]
@@ -149,12 +150,12 @@ with tf.Session(graph=graph) as sess:
     #for _ in range(100):
     pred_letter = ""
     while pred_letter != WH.vocab.vocab[-1]:
-        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: 1.0})
+        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
         pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
         pred_id = WH.vocab.char2id(pred_letter)
         start = [pred_id]
         state = s
         sample.append(pred_letter)
-        if len(sample) > 500:
+        if len(sample) > 1000:
             break
     print("SAMPLE: {}".format(''.join(sample)))
