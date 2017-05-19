@@ -4,6 +4,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import pickle
 import os
+from datetime import datetime
+import time
 
 # Set random seed
 seed = 36 # Pick your favorite
@@ -13,8 +15,26 @@ tf.set_random_seed(seed)
 ######################################### CONSTANTS ########################################
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/cpu:0" # Controls whether we run on CPU or GPU
-INPUT_SIZE = 28 * 28 # Size of an image in dataset
+INPUT_SIZE = 28 # Size of an image in dataset
 NUM_CHANNELS = 1
+
+FLAGS = tf.app.flags.FLAGS
+
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+TRAIN_DIR = os.path.join(DIR_PATH,"log")
+DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
+SAVE_DIR = os.path.join(DIR_PATH,"saved","conv")
+BATCH_SIZE = 128
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
+NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
+MAX_STEPS = 1000000
+LOG_FREQUENCY = 10
+
+# Constants describing the training process.
+MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
+NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
+LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
+INITIAL_LEARNING_RATE = 0.1
 
 ######################################### UTILITY FUNCTIONS ########################################
 def genRandNum():
@@ -37,19 +57,6 @@ def onehot(x):
         return oh
 
 
-######################################### LOAD DATA ########################################
-dir_path = os.path.dirname(os.path.realpath(__file__))
-data_path = os.path.join(dir_path,"data","notMNIST.pkl")
-with open(data_path,"rb") as f:
-    data = pickle.load(f)
-train_dataset = data['train_dataset']
-train_labels = data['train_labels']
-test_dataset = data['test_dataset']
-test_labels = data['test_labels']
-valid_dataset = data['valid_dataset']
-valid_labels = data['valid_labels']
-
-
 ######################################## SUMMARY HELPERS #################################
 def activation_summary(x):
   """Helper to create summaries for activations.
@@ -62,7 +69,7 @@ def activation_summary(x):
   """
   # Remove 'tower_[0-9]/' from the name in case this is a multi-GPU training
   # session. This helps the clarity of presentation on tensorboard.
-  tensor_name = re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
+  tensor_name = x.op.name#re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
   tf.summary.histogram(tensor_name + '/activations', x)
   tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
@@ -72,9 +79,9 @@ def model(images):
     # CONV NET
     # conv1
     with tf.variable_scope('conv1') as scope:
-        kernel = tf.get_variable('weights',shape=[5, 5, NUM_CHANNELS, 64],tf.truncated_normal_initializer(stddev=5e-2))
+        kernel = tf.get_variable('weights',shape=[5, 5, NUM_CHANNELS, 64],initializer=tf.truncated_normal_initializer(stddev=5e-2))
         conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = tf.get_variable('biases', [64], tf.constant_initializer(0.0))
+        biases = tf.get_variable('biases', shape=[64], initializer=tf.constant_initializer(0.0))
         pre_activation = tf.nn.bias_add(conv, biases)
         conv1 = tf.nn.relu(pre_activation, name=scope.name)
         activation_summary(conv1)
@@ -87,9 +94,9 @@ def model(images):
 
     # conv2
     with tf.variable_scope('conv2') as scope:
-        kernel = tf.get_variable('weights', shape=[5, 5, 64, 64], tf.truncated_normal_initializer(stddev=5e-2))
+        kernel = tf.get_variable('weights', shape=[5, 5, 64, 64], initializer=tf.truncated_normal_initializer(stddev=5e-2))
         conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = tf.get_variable('biases', [64], tf.constant_initializer(0.1))
+        biases = tf.get_variable('biases', shape=[64], initializer=tf.constant_initializer(0.1))
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
         activation_summary(conv2)
@@ -102,14 +109,14 @@ def model(images):
     # local3
     with tf.variable_scope('local3') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
-        reshape = tf.reshape(pool2, [batch_size, -1])
+        reshape = tf.reshape(pool2, [BATCH_SIZE, -1])
         dim = reshape.get_shape()[1].value
-        weights = tf.get_variable('weights', shape=[dim, 384], tf.truncated_normal_initializer(stddev=0.04))
+        weights = tf.get_variable('weights', shape=[dim, 384], initializer=tf.truncated_normal_initializer(stddev=0.04))
         # Add weight decay for this layer
         weight_decay = tf.multiply(tf.nn.l2_loss(weights), 0.004, name='weight_loss')
         tf.add_to_collection('losses', weight_decay)
         #
-        biases = tf.get_variable('biases', [384], tf.constant_initializer(0.1))
+        biases = tf.get_variable('biases', [384], initializer=tf.constant_initializer(0.1))
         local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
         activation_summary(local3)
 
@@ -118,14 +125,14 @@ def model(images):
     # tf.nn.sparse_softmax_cross_entropy_with_logits accepts the unscaled logits
     # and performs the softmax internally for efficiency.
     with tf.variable_scope('softmax_linear') as scope:
-        weights = tf.get_variable('weights', [384, NUM_CLASSES], tf.truncated_normal_initializer(stddev=1/384.0))
-        biases = tf.get_variable('biases', [NUM_CLASSES], tf.constant_initializer(0.0))
+        weights = tf.get_variable('weights', shape=[384, NUM_CLASSES], initializer=tf.truncated_normal_initializer(stddev=1/384.0))
+        biases = tf.get_variable('biases', shape=[NUM_CLASSES], initializer=tf.constant_initializer(0.0))
         softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
         activation_summary(softmax_linear)
 
     return softmax_linear
 
-def loss(logits, labels):
+def calculateLoss(logits, labels):
     # Calculate the average cross entropy loss across the batch.
     labels = tf.cast(labels, tf.int64)
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits, name='cross_entropy_per_example')
@@ -163,7 +170,7 @@ def add_loss_summaries(total_loss):
 
 def train(total_loss, global_step):
     # Variables that affect learning rate.
-    num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / FLAGS.batch_size
+    num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / BATCH_SIZE
     decay_steps = int(num_batches_per_epoch * NUM_EPOCHS_PER_DECAY)
 
     # Decay the learning rate exponentially based on the number of steps.
@@ -206,24 +213,38 @@ def train(total_loss, global_step):
 
 
 
-def train():
-    """Train CIFAR-10 for a number of steps."""
+def main(argv=None):
     with tf.Graph().as_default():
         global_step = tf.contrib.framework.get_or_create_global_step()
 
-        # Get images and labels for CIFAR-10.
-        images, labels = cifar10.distorted_inputs()
+        ######################################### LOAD DATA ########################################
+        with open(DATA_PATH,"rb") as f:
+            data = pickle.load(f)
+        # Image dataset needs to be shaped into 4D tensor to accomodate convolution operator.
+        # If these images were color this new dimension would be the color channels.
+        #   [num_examples, in_height, in_width, in_channels]
+        train_dataset = data['train_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
+        train_labels = data['train_labels']
+        test_dataset = data['test_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
+        test_labels = data['test_labels']
+        valid_dataset = data['valid_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
+        valid_labels = data['valid_labels']
+
+        # Generate a batch queue
+        train_batch, label_batch = tf.train.batch([train_dataset, train_labels],batch_size=BATCH_SIZE,capacity=4000,enqueue_many=True)
+
+        tf.summary.image('images', train_batch)
 
         # Build a Graph that computes the logits predictions from the
         # inference model.
-        logits = cifar10.inference(images)
+        logits = model(train_batch)
 
         # Calculate loss.
-        loss = cifar10.loss(logits, labels)
+        loss = calculateLoss(logits, label_batch)
 
         # Build a Graph that trains the model with one batch of examples and
         # updates the model parameters.
-        train_op = cifar10.train(loss, global_step)
+        train_op = train(loss, global_step)
 
         class _LoggerHook(tf.train.SessionRunHook):
             """Logs loss and runtime."""
@@ -237,14 +258,14 @@ def train():
                 return tf.train.SessionRunArgs(loss)  # Asks for loss value.
 
             def after_run(self, run_context, run_values):
-                if self._step % FLAGS.log_frequency == 0:
+                if self._step % LOG_FREQUENCY == 0:
                     current_time = time.time()
                     duration = current_time - self._start_time
                     self._start_time = current_time
 
                     loss_value = run_values.results
-                    examples_per_sec = FLAGS.log_frequency * FLAGS.batch_size / duration
-                    sec_per_batch = float(duration / FLAGS.log_frequency)
+                    examples_per_sec = LOG_FREQUENCY * BATCH_SIZE / duration
+                    sec_per_batch = float(duration / LOG_FREQUENCY)
 
                     format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f '
                                                 'sec/batch)')
@@ -252,23 +273,15 @@ def train():
                                                              examples_per_sec, sec_per_batch))
 
         with tf.train.MonitoredTrainingSession(
-                checkpoint_dir=FLAGS.train_dir,
-                hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps),
-                             tf.train.NanTensorHook(loss),
-                             _LoggerHook()],
-                config=tf.ConfigProto(
-                        log_device_placement=FLAGS.log_device_placement)) as mon_sess:
+                checkpoint_dir=SAVE_DIR,
+                hooks=[tf.train.StopAtStepHook(last_step=MAX_STEPS),tf.train.NanTensorHook(loss),_LoggerHook()],
+                config=tf.ConfigProto(log_device_placement=False)) as mon_sess:
             while not mon_sess.should_stop():
                 mon_sess.run(train_op)
 
 
-def main(argv=None):  # pylint: disable=unused-argument
-    cifar10.maybe_download_and_extract()
-    if tf.gfile.Exists(FLAGS.train_dir):
-        tf.gfile.DeleteRecursively(FLAGS.train_dir)
-    tf.gfile.MakeDirs(FLAGS.train_dir)
-    train()
-
-
 if __name__ == '__main__':
-  tf.app.run()
+    if tf.gfile.Exists(TRAIN_DIR):
+        tf.gfile.DeleteRecursively(TRAIN_DIR)
+    tf.gfile.MakeDirs(TRAIN_DIR)
+    tf.app.run()
