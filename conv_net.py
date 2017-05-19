@@ -21,7 +21,7 @@ NUM_CHANNELS = 1
 FLAGS = tf.app.flags.FLAGS
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-TRAIN_DIR = os.path.join(DIR_PATH,"log")
+TRAIN_DIR = "/tmp/tensorflow/log"
 DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
 SAVE_DIR = os.path.join(DIR_PATH,"saved","conv")
 BATCH_SIZE = 128
@@ -231,7 +231,7 @@ def main(argv=None):
         valid_labels = data['valid_labels']
 
         # Generate a batch queue
-        train_batch, label_batch = tf.train.batch([train_dataset, train_labels],batch_size=BATCH_SIZE,capacity=4000,enqueue_many=True)
+        train_batch, label_batch = tf.train.batch([train_dataset, train_labels],batch_size=BATCH_SIZE,capacity=30,enqueue_many=True)
 
         tf.summary.image('images', train_batch)
 
@@ -246,6 +246,17 @@ def main(argv=None):
         # updates the model parameters.
         train_op = train(loss, global_step)
 
+        # Create a saver.
+        saver = tf.train.Saver(tf.global_variables())
+
+        # Build the summary operation from the last tower summaries.
+        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
+        summary_op = tf.summary.merge(summaries)
+        summary_writer = tf.summary.FileWriter(TRAIN_DIR)
+
+        # Build an initialization operation to run below.
+        init = tf.global_variables_initializer()
+
         class _LoggerHook(tf.train.SessionRunHook):
             """Logs loss and runtime."""
 
@@ -259,6 +270,10 @@ def main(argv=None):
 
             def after_run(self, run_context, run_values):
                 if self._step % LOG_FREQUENCY == 0:
+
+                    summary_str = sess.run(summary_op)
+                    summary_writer.add_summary(summary_str, step)
+
                     current_time = time.time()
                     duration = current_time - self._start_time
                     self._start_time = current_time
@@ -267,10 +282,8 @@ def main(argv=None):
                     examples_per_sec = LOG_FREQUENCY * BATCH_SIZE / duration
                     sec_per_batch = float(duration / LOG_FREQUENCY)
 
-                    format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f '
-                                                'sec/batch)')
-                    print (format_str % (datetime.now(), self._step, loss_value,
-                                                             examples_per_sec, sec_per_batch))
+                    format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f sec/batch)')
+                    print (format_str % (datetime.now(), self._step, loss_value, examples_per_sec, sec_per_batch))
 
         with tf.train.MonitoredTrainingSession(
                 checkpoint_dir=SAVE_DIR,
@@ -281,7 +294,4 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    if tf.gfile.Exists(TRAIN_DIR):
-        tf.gfile.DeleteRecursively(TRAIN_DIR)
-    tf.gfile.MakeDirs(TRAIN_DIR)
     tf.app.run()
