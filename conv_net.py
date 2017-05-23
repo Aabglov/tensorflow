@@ -7,6 +7,23 @@ import os
 from datetime import datetime
 import time
 
+# PATHS
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
+LOG_DIR = "/tmp/tensorflow/log"
+DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
+CSV_PATH = os.path.join(DIR_PATH,"test.csv")
+
+
+# with open(CSV_PATH,"w+") as f:
+#     for i in range(len(train)):
+#         f.write(",".join(["{:f}".format(t) for t in train[i].ravel()]) +
+#                 "," +
+#                 "{:f}".format(labels[i]) +
+#                 "\n")
+#
+# HODOR
+
 # Set random seed
 seed = 36 # Pick your favorite
 np.random.seed(seed)
@@ -15,26 +32,48 @@ tf.set_random_seed(seed)
 ######################################### CONSTANTS ########################################
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/cpu:0" # Controls whether we run on CPU or GPU
-INPUT_SIZE = 28 # Size of an image in dataset
+IMG_SIZE = 28 # Size of an image in dataset
 NUM_CHANNELS = 1
+LEARNING_RATE = 0.001
 
-FLAGS = tf.app.flags.FLAGS
+HIDDEN_SIZE_1 = 256 # 1st layer number of features
+HIDDEN_SIZE_2 = 256 # 2nd layer number of features
+INPUT_SIZE = 784 # MNIST data input (img shape: 28*28)
+NUM_CLASSES = 10 # MNIST total classes (0-9 digits)
 
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-TRAIN_DIR = "/tmp/tensorflow/log"
-DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
-SAVE_DIR = os.path.join(DIR_PATH,"saved","conv")
 BATCH_SIZE = 128
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
-MAX_STEPS = 1000000
+MAX_STEPS = 10000
 LOG_FREQUENCY = 10
 
 # Constants describing the training process.
-MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
-NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
-LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
-INITIAL_LEARNING_RATE = 0.1
+#MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
+#NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
+#LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
+#INITIAL_LEARNING_RATE = 0.1
+
+# LOAD DATA
+with open(DATA_PATH,"rb") as f:
+    data = pickle.load(f)
+TRAIN_DATASET = data["train_dataset"]
+TRAIN_LABELS = data["train_labels"]
+TEST_DATASET = data["test_dataset"]
+TEST_LABELS = data["test_labels"]
+VALID_DATASET = data["valid_dataset"]
+VALID_LABELS = data["valid_labels"]
+
+class Batcher:
+    def __init__(self,dataset,labels):
+        self.counter = 0
+        self.dataset = dataset
+        self.labels = labels
+
+    def nextBatch(self,batch_size):
+        batch = self.dataset[self.counter:self.counter+batch_size],self.labels[self.counter:self.counter+batch_size]
+        self.counter = (self.counter + batch_size) % len(self.labels)
+        return batch
+
 
 ######################################### UTILITY FUNCTIONS ########################################
 def genRandNum():
@@ -56,242 +95,161 @@ def onehot(x):
         oh[np.arange(num), x] = 1.0
         return oh
 
-
-######################################## SUMMARY HELPERS #################################
-def activation_summary(x):
-  """Helper to create summaries for activations.
-  Creates a summary that provides a histogram of activations.
-  Creates a summary that measures the sparsity of activations.
-  Args:
-    x: Tensor
-  Returns:
-    nothing
-  """
-  # Remove 'tower_[0-9]/' from the name in case this is a multi-GPU training
-  # session. This helps the clarity of presentation on tensorboard.
-  tensor_name = x.op.name#re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
-  tf.summary.histogram(tensor_name + '/activations', x)
-  tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
+def variable_summaries(var):
+    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+    with tf.name_scope('summaries'):
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar('mean', mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.summary.scalar('stddev', stddev)
+        tf.summary.scalar('max', tf.reduce_max(var))
+        tf.summary.scalar('min', tf.reduce_min(var))
+        tf.summary.histogram('histogram', var)
 
 
-######################################### MODEL ########################################
-def model(images):
-    # CONV NET
-    # conv1
-    with tf.variable_scope('conv1') as scope:
-        kernel = tf.get_variable('weights',shape=[5, 5, NUM_CHANNELS, 64],initializer=tf.truncated_normal_initializer(stddev=5e-2))
-        conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = tf.get_variable('biases', shape=[64], initializer=tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv1 = tf.nn.relu(pre_activation, name=scope.name)
-        activation_summary(conv1)
+# DEFINE MODEL
+graph = tf.Graph()
+with graph.as_default():
+    # tf Graph input
 
-    # pool1
-    pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],padding='SAME', name='pool1')
+    # Input placeholders
+    with tf.name_scope('input'):
+        x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
+        y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='y-input')
+        tf.summary.image('input', x, NUM_CLASSES)
 
-    # norm1
-    norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75, name='norm1')
+    with tf.name_scope('input_reshape'):
+        image_shaped_input = tf.reshape(x, [-1, INPUT_SIZE])
 
-    # conv2
-    with tf.variable_scope('conv2') as scope:
-        kernel = tf.get_variable('weights', shape=[5, 5, 64, 64], initializer=tf.truncated_normal_initializer(stddev=5e-2))
-        conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = tf.get_variable('biases', shape=[64], initializer=tf.constant_initializer(0.1))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        activation_summary(conv2)
+    # We can't initialize these variables to 0 - the network will get stuck.
+    def init_weight(shape):
+        """Create a weight variable with appropriate initialization."""
+        initial = tf.truncated_normal(shape, stddev=0.1)
+        #return tf.get_variable(shape=shape,initializer=tf.truncated_normal_initializer(stddev=0.1))
+        return tf.Variable(initial)
 
-    # norm2
-    norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75, name='norm2')
-    # pool2
-    pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool2')
+    def init_bias(shape):
+        """Create a bias variable with appropriate initialization."""
+        initial = tf.constant(0.1, shape=shape)
+        # return  tf.get_variable(shape=shape, initializer=tf.constant_initializer(0.1))
+        return tf.Variable(initial)
 
-    # local3
-    with tf.variable_scope('local3') as scope:
-        # Move everything into depth so we can perform a single matrix multiply.
-        reshape = tf.reshape(pool2, [BATCH_SIZE, -1])
-        dim = reshape.get_shape()[1].value
-        weights = tf.get_variable('weights', shape=[dim, 384], initializer=tf.truncated_normal_initializer(stddev=0.04))
-        # Add weight decay for this layer
-        weight_decay = tf.multiply(tf.nn.l2_loss(weights), 0.004, name='weight_loss')
-        tf.add_to_collection('losses', weight_decay)
-        #
-        biases = tf.get_variable('biases', [384], initializer=tf.constant_initializer(0.1))
-        local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
-        activation_summary(local3)
+    # Create model
+    def layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+        # Adding a name scope ensures logical grouping of the layers in the graph.
+        with tf.name_scope(layer_name):
+            # This Variable will hold the state of the weights for the layer
+            with tf.name_scope('weights'):
+                weights = init_weight([input_dim, output_dim])
+                variable_summaries(weights)
+            with tf.name_scope('biases'):
+                biases = init_bias([output_dim])
+                variable_summaries(biases)
+            with tf.name_scope('Wx_plus_b'):
+                preactivate = tf.matmul(input_tensor, weights) + biases
+                tf.summary.histogram('pre_activations', preactivate)
+            activations = act(preactivate, name='activation')
+            tf.summary.histogram('activations', activations)
+            return activations
 
-    # linear layer(WX + b),
-    # We don't apply softmax here because
-    # tf.nn.sparse_softmax_cross_entropy_with_logits accepts the unscaled logits
-    # and performs the softmax internally for efficiency.
-    with tf.variable_scope('softmax_linear') as scope:
-        weights = tf.get_variable('weights', shape=[384, NUM_CLASSES], initializer=tf.truncated_normal_initializer(stddev=1/384.0))
-        biases = tf.get_variable('biases', shape=[NUM_CLASSES], initializer=tf.constant_initializer(0.0))
-        softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
-        activation_summary(softmax_linear)
+    # Create our 3-layer model
+    hidden1 = layer(image_shaped_input, INPUT_SIZE, HIDDEN_SIZE_1, 'layer1')
+    hidden2 = layer(hidden1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2')
+    pred =    layer(hidden2, HIDDEN_SIZE_2, NUM_CLASSES, 'out_layer',tf.identity)
 
-    return softmax_linear
+    # Define loss function
+    with tf.name_scope('cross_entropy'):
+        diff = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=pred)
+        with tf.name_scope('total'):
+            cross_entropy = tf.reduce_mean(diff)
+    tf.summary.scalar('cross_entropy', cross_entropy)
 
-def calculateLoss(logits, labels):
-    # Calculate the average cross entropy loss across the batch.
-    labels = tf.cast(labels, tf.int64)
-    cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits, name='cross_entropy_per_example')
-    cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-    tf.add_to_collection('losses', cross_entropy_mean)
+    # Define optimizer
+    with tf.name_scope('train'):
+        train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy)
 
-    # The total loss is defined as the cross entropy loss plus all of the weight
-    # decay terms (L2 loss).
-    # NOTE: We should only have one other value in this collection (local3)
-    # but that may change
-    return tf.add_n(tf.get_collection('losses'), name='total_loss')
+    # Define and track accuracy
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    tf.summary.scalar('accuracy', accuracy)
 
+    # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
+    test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'test'))
 
-def add_loss_summaries(total_loss):
-    # Compute the moving average of all individual losses and the total loss.
-    loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
-    losses = tf.get_collection('losses')
-    loss_averages_op = loss_averages.apply(losses + [total_loss])
+    # Initializing the variables
+    init = tf.global_variables_initializer()
 
-    # Attach a scalar summary to all individual losses and the total loss; do the
-    # same for the averaged version of the losses.
-    for l in losses + [total_loss]:
-        # Name each loss as '(raw)' and name the moving average version of the loss
-        # as the original loss name.
-        tf.summary.scalar(l.op.name + ' (raw)', l)
-        tf.summary.scalar(l.op.name, loss_averages.average(l))
+    # 'Saver' op to save and restore all the variables
+    saver = tf.train.Saver()
 
-    return loss_averages_op
+#Running first session
+def main():
+    with tf.Session(graph=graph) as sess:
+        # Initialize variables
+        sess.run(init)
 
+        try:
+            saver.restore(sess, SAVE_PATH)
+            print("Model restored from file: %s" % SAVE_PATH)
+        except Exception as e:
+            print("Model restore failed {}".format(e))
 
-# TODO:
-# FIX EVERYTHING BELOW THIS LINE
-# Test model, try different structure
-# Add notMNIST data in place of cifar
+        train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
+        #test_batcher =  Batcher(TEST_DATASET, TEST_DATASET)
+        total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
 
-def train(total_loss, global_step):
-    # Variables that affect learning rate.
-    num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / BATCH_SIZE
-    decay_steps = int(num_batches_per_epoch * NUM_EPOCHS_PER_DECAY)
+        # Training cycle
+        for epoch in range(MAX_STEPS):
+            avg_cost = 0.
 
-    # Decay the learning rate exponentially based on the number of steps.
-    lr = tf.train.exponential_decay(INITIAL_LEARNING_RATE,
-                                  global_step,
-                                  decay_steps,
-                                  LEARNING_RATE_DECAY_FACTOR,
-                                  staircase=True)
-    tf.summary.scalar('learning_rate', lr)
+            # Loop over all batches
+            for i in range(total_batch):
+                batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
+                # Run optimization op (backprop) and cost op (to get loss value)
+                summary, _ = sess.run([merged, train_step], feed_dict={x: batch_x, y: batch_y})
+                train_writer.add_summary(summary, i)
 
-    # Generate moving averages of all losses and associated summaries.
-    loss_averages_op = add_loss_summaries(total_loss)
+                # Keep track of meta data
+                if i % 100 == 0:
+                    #   I'm not a billion percent sure what this does....
+                    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                    run_metadata = tf.RunMetadata()
+                    summary, _ = sess.run([merged, train_step],
+                                          feed_dict={x: batch_x, y: batch_y},
+                                          options=run_options,
+                                          run_metadata=run_metadata)
+                    train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
+                    train_writer.add_summary(summary, i)
+                    print('Adding run metadata for', i)
 
-    # Compute gradients.
-    with tf.control_dependencies([loss_averages_op]):
-        opt = tf.train.GradientDescentOptimizer(lr)
-        grads = opt.compute_gradients(total_loss)
+            # Display logs per epoch step
+            if epoch % LOG_FREQUENCY == 0:
+                summary, acc = sess.run([merged, accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
+                test_writer.add_summary(summary, i)
+                print('Accuracy at step %s: %s' % (epoch, acc))
+        # Cleanup
+        train_writer.close()
+        test_writer.close()
+        print("Training Finished!")
 
-    # Apply gradients.
-    apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+        # Test model
+        _,acc = sess.run([correct_prediction,accuracy], feed_dict={x: mnist.test.images, y: mnist.test.labels})
+        print("Accuracy:", acc)
 
-    # Add histograms for trainable variables.
-    for var in tf.trainable_variables():
-        tf.summary.histogram(var.op.name, var)
-
-    # Add histograms for gradients.
-    for grad, var in grads:
-        if grad is not None:
-            tf.summary.histogram(var.op.name + '/gradients', grad)
-
-    # Track the moving averages of all trainable variables.
-    variable_averages = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
-    variables_averages_op = variable_averages.apply(tf.trainable_variables())
-
-    with tf.control_dependencies([apply_gradient_op, variables_averages_op]):
-        train_op = tf.no_op(name='train')
-
-    return train_op
-
-
-
-
-def main(argv=None):
-    with tf.Graph().as_default():
-        global_step = tf.contrib.framework.get_or_create_global_step()
-
-        ######################################### LOAD DATA ########################################
-        with open(DATA_PATH,"rb") as f:
-            data = pickle.load(f)
-        # Image dataset needs to be shaped into 4D tensor to accomodate convolution operator.
-        # If these images were color this new dimension would be the color channels.
-        #   [num_examples, in_height, in_width, in_channels]
-        train_dataset = data['train_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
-        train_labels = data['train_labels']
-        test_dataset = data['test_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
-        test_labels = data['test_labels']
-        valid_dataset = data['valid_dataset'].reshape((-1,INPUT_SIZE,INPUT_SIZE,1))
-        valid_labels = data['valid_labels']
-
-        # Generate a batch queue
-        train_batch, label_batch = tf.train.batch([train_dataset, train_labels],batch_size=BATCH_SIZE,capacity=30,enqueue_many=True)
-
-        tf.summary.image('images', train_batch)
-
-        # Build a Graph that computes the logits predictions from the
-        # inference model.
-        logits = model(train_batch)
-
-        # Calculate loss.
-        loss = calculateLoss(logits, label_batch)
-
-        # Build a Graph that trains the model with one batch of examples and
-        # updates the model parameters.
-        train_op = train(loss, global_step)
-
-        # Create a saver.
-        saver = tf.train.Saver(tf.global_variables())
-
-        # Build the summary operation from the last tower summaries.
-        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
-        summary_op = tf.summary.merge(summaries)
-        summary_writer = tf.summary.FileWriter(TRAIN_DIR)
-
-        # Build an initialization operation to run below.
-        init = tf.global_variables_initializer()
-
-        class _LoggerHook(tf.train.SessionRunHook):
-            """Logs loss and runtime."""
-
-            def begin(self):
-                self._step = -1
-                self._start_time = time.time()
-
-            def before_run(self, run_context):
-                self._step += 1
-                return tf.train.SessionRunArgs(loss)  # Asks for loss value.
-
-            def after_run(self, run_context, run_values):
-                if self._step % LOG_FREQUENCY == 0:
-
-                    summary_str = sess.run(summary_op)
-                    summary_writer.add_summary(summary_str, step)
-
-                    current_time = time.time()
-                    duration = current_time - self._start_time
-                    self._start_time = current_time
-
-                    loss_value = run_values.results
-                    examples_per_sec = LOG_FREQUENCY * BATCH_SIZE / duration
-                    sec_per_batch = float(duration / LOG_FREQUENCY)
-
-                    format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f sec/batch)')
-                    print (format_str % (datetime.now(), self._step, loss_value, examples_per_sec, sec_per_batch))
-
-        with tf.train.MonitoredTrainingSession(
-                checkpoint_dir=SAVE_DIR,
-                hooks=[tf.train.StopAtStepHook(last_step=MAX_STEPS),tf.train.NanTensorHook(loss),_LoggerHook()],
-                config=tf.ConfigProto(log_device_placement=False)) as mon_sess:
-            while not mon_sess.should_stop():
-                mon_sess.run(train_op)
+        # Save model weights to disk
+        save_path = saver.save(sess, SAVE_PATH)
+        print("Model saved in file: %s" % save_path)
 
 
-if __name__ == '__main__':
-    tf.app.run()
+if __name__ == "__main__":
+    # Cleanup previous training log
+    if tf.gfile.Exists(LOG_DIR):
+        tf.gfile.DeleteRecursively(LOG_DIR)
+    tf.gfile.MakeDirs(LOG_DIR)
+    main()
