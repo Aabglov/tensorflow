@@ -10,7 +10,7 @@ import time
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
-LOG_DIR = "/tmp/tensorflow/log"
+LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
 DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
 CSV_PATH = os.path.join(DIR_PATH,"test.csv")
 
@@ -45,7 +45,7 @@ BATCH_SIZE = 128
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 MAX_STEPS = 10000
-LOG_FREQUENCY = 10
+LOG_FREQUENCY = 1
 
 # Constants describing the training process.
 #MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
@@ -63,6 +63,8 @@ TEST_LABELS = data["test_labels"]
 VALID_DATASET = data["valid_dataset"]
 VALID_LABELS = data["valid_labels"]
 
+
+
 class Batcher:
     def __init__(self,dataset,labels):
         self.counter = 0
@@ -76,24 +78,6 @@ class Batcher:
 
 
 ######################################### UTILITY FUNCTIONS ########################################
-def genRandNum():
-    return np.random.randint(NUM_CLASSES)
-
-# Dynamic One-Hot Encoder
-#   Works on int, list and Numpy Arrays
-def onehot(x):
-    if type(x).__name__ in ["int","float"]:
-        oh = np.zeros((1,NUM_CLASSES))
-        oh[0,x] = 1.0
-        return oh
-    elif type(x).__name__ in ["ndarray","list"]:
-        if type(x).__name__ == "list":
-            num = len(x)
-        elif type(x).__name__ == "ndarray":
-            num = x.shape[0]
-        oh = np.zeros((num,NUM_CLASSES))
-        oh[np.arange(num), x] = 1.0
-        return oh
 
 def variable_summaries(var):
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -116,11 +100,13 @@ with graph.as_default():
     # Input placeholders
     with tf.name_scope('input'):
         x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
-        y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='y-input')
-        tf.summary.image('input', x, NUM_CLASSES)
+        y = tf.placeholder(tf.int32, [None,], name='y-input')
 
     with tf.name_scope('input_reshape'):
-        image_shaped_input = tf.reshape(x, [-1, INPUT_SIZE])
+        image_shaped_input = tf.reshape(x,[-1,IMG_SIZE, IMG_SIZE, 1])
+        tf.summary.image('input', image_shaped_input, NUM_CLASSES)
+        shaped_input = tf.reshape(x, [-1, INPUT_SIZE])
+        shaped_labels = tf.one_hot(y,NUM_CLASSES)
 
     # We can't initialize these variables to 0 - the network will get stuck.
     def init_weight(shape):
@@ -154,13 +140,13 @@ with graph.as_default():
             return activations
 
     # Create our 3-layer model
-    hidden1 = layer(image_shaped_input, INPUT_SIZE, HIDDEN_SIZE_1, 'layer1')
+    hidden1 = layer(shaped_input, INPUT_SIZE, HIDDEN_SIZE_1, 'layer1')
     hidden2 = layer(hidden1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2')
     pred =    layer(hidden2, HIDDEN_SIZE_2, NUM_CLASSES, 'out_layer',tf.identity)
 
     # Define loss function
     with tf.name_scope('cross_entropy'):
-        diff = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=pred)
+        diff = tf.nn.softmax_cross_entropy_with_logits(labels=shaped_labels, logits=pred)
         with tf.name_scope('total'):
             cross_entropy = tf.reduce_mean(diff)
     tf.summary.scalar('cross_entropy', cross_entropy)
@@ -172,7 +158,7 @@ with graph.as_default():
     # Define and track accuracy
     with tf.name_scope('accuracy'):
         with tf.name_scope('correct_prediction'):
-            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(shaped_labels, 1))
         with tf.name_scope('accuracy'):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     tf.summary.scalar('accuracy', accuracy)
@@ -239,7 +225,7 @@ def main():
         print("Training Finished!")
 
         # Test model
-        _,acc = sess.run([correct_prediction,accuracy], feed_dict={x: mnist.test.images, y: mnist.test.labels})
+        _,acc = sess.run([correct_prediction,accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
         print("Accuracy:", acc)
 
         # Save model weights to disk
