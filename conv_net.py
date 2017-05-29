@@ -23,7 +23,7 @@ tf.gfile.MakeDirs(LOG_DIR)
 
 ######################################### CONSTANTS ########################################
 NUM_CLASSES = 10 # The number of digits present in the dataset
-DEVICE = "/cpu:0" # Controls whether we run on CPU or GPU
+DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 IMG_SIZE = 28 # Size of an image in dataset
 NUM_CHANNELS = 1
 LEARNING_RATE = 0.001
@@ -94,7 +94,7 @@ def activation_summary(x):
     tf.summary.histogram(tensor_name + '/activations', x)
     tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
-with tf.device('/gpu:0'):
+with tf.device(DEVICE):
     # DEFINE MODEL
     graph = tf.Graph()
     with graph.as_default():
@@ -194,7 +194,7 @@ with tf.device('/gpu:0'):
 
     #Running first session
     #def main():
-    with tf.Session(graph=graph) as sess:
+    with tf.Session(graph=graph,config=tf.ConfigProto(log_device_placement=True)) as sess:
         # Initialize variables
         sess.run(init)
 
