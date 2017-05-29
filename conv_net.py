@@ -7,6 +7,7 @@ import time
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
+model_path = os.path.join(dir_path,"saved","conv","model_steps.ckpt")
 LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
 DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
 CSV_PATH = os.path.join(DIR_PATH,"test.csv")
@@ -73,28 +74,28 @@ class Batcher:
 
 
 ######################################### UTILITY FUNCTIONS ########################################
-
-def variable_summaries(var):
-    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-    with tf.name_scope('summaries'):
-        mean = tf.reduce_mean(var)
-        tf.summary.scalar('mean', mean)
-        with tf.name_scope('stddev'):
-            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-        tf.summary.scalar('stddev', stddev)
-        tf.summary.scalar('max', tf.reduce_max(var))
-        tf.summary.scalar('min', tf.reduce_min(var))
-        tf.summary.histogram('histogram', var)
-
-def activation_summary(x):
-    """Helper to create summaries for activations.
-    Creates a summary that provides a histogram of activations.
-    Creates a summary that measures the sparsity of activations."""
-    tensor_name = x.op.name
-    tf.summary.histogram(tensor_name + '/activations', x)
-    tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
-
 with tf.device(DEVICE):
+
+    def variable_summaries(var):
+        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+        with tf.name_scope('summaries'):
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean', mean)
+            with tf.name_scope('stddev'):
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar('stddev', stddev)
+            tf.summary.scalar('max', tf.reduce_max(var))
+            tf.summary.scalar('min', tf.reduce_min(var))
+            tf.summary.histogram('histogram', var)
+
+    def activation_summary(x):
+        """Helper to create summaries for activations.
+        Creates a summary that provides a histogram of activations.
+        Creates a summary that measures the sparsity of activations."""
+        tensor_name = x.op.name
+        tf.summary.histogram(tensor_name + '/activations', x)
+        tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
+
     # DEFINE MODEL
     graph = tf.Graph()
     with graph.as_default():
@@ -199,7 +200,9 @@ with tf.device(DEVICE):
         sess.run(init)
 
         try:
-            saver.restore(sess, SAVE_PATH)
+            ckpt = tf.train.get_checkpoint_state(SAVE_PATH)
+            saver.restore(sess, ckpt.model_checkpoint_path)
+            #saver.restore(sess, SAVE_PATH)
             print("Model restored from file: %s" % SAVE_PATH)
         except Exception as e:
             print("Model restore failed {}".format(e))
@@ -236,6 +239,7 @@ with tf.device(DEVICE):
             if epoch % LOG_FREQUENCY == 0:
                 summary, acc = sess.run([merged, accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
                 test_writer.add_summary(summary, i)
+                save_path = saver.save(sess, MODEL_PATH, global_step = epoch)
                 print('Accuracy at step %s: %s' % (epoch, acc))
         # Cleanup
         train_writer.close()
