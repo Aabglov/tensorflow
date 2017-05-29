@@ -7,7 +7,7 @@ import time
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
-model_path = os.path.join(dir_path,"saved","conv","model_steps.ckpt")
+model_path = os.path.join(DIR_PATH,"saved","conv","model_steps.ckpt")
 LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
 DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
 CSV_PATH = os.path.join(DIR_PATH,"test.csv")
