@@ -75,26 +75,6 @@ class Batcher:
 ######################################### UTILITY FUNCTIONS ########################################
 with tf.device(DEVICE):
 
-    def variable_summaries(var):
-        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-        with tf.name_scope('summaries'):
-            mean = tf.reduce_mean(var)
-            tf.summary.scalar('mean', mean)
-            with tf.name_scope('stddev'):
-                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-            tf.summary.scalar('stddev', stddev)
-            tf.summary.scalar('max', tf.reduce_max(var))
-            tf.summary.scalar('min', tf.reduce_min(var))
-            tf.summary.histogram('histogram', var)
-
-    def activation_summary(x):
-        """Helper to create summaries for activations.
-        Creates a summary that provides a histogram of activations.
-        Creates a summary that measures the sparsity of activations."""
-        tensor_name = x.op.name
-        tf.summary.histogram(tensor_name + '/activations', x)
-        tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
-
     # DEFINE MODEL
     graph = tf.Graph()
     with graph.as_default():
@@ -134,16 +114,11 @@ with tf.device(DEVICE):
                 #   activation=act)
 
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
-                variable_summaries(kernel)
                 conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='SAME')
                 biases = init_bias([output_dim], name=layer_name, c=0.0)
-                variable_summaries(biases)
                 pre_activation = tf.nn.bias_add(conv, biases)
-                tf.summary.histogram('pre_activations', pre_activation)
                 conv = tf.nn.relu(pre_activation, name=scope.name)
-                tf.summary.histogram('activations',conv)
                 image_shaped_conv_first = tf.reshape(kernel,[output_dim * channel_dim] + kernel_shape + [1])
-                tf.summary.image('{}_conv'.format(layer_name), image_shaped_conv_first, 8)
                 # Pooling
                 pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
                 return pool
@@ -167,7 +142,6 @@ with tf.device(DEVICE):
             diff = tf.nn.softmax_cross_entropy_with_logits(labels=shaped_labels, logits=logits)
             with tf.name_scope('total'):
                 cross_entropy = tf.reduce_mean(diff)
-        tf.summary.scalar('cross_entropy', cross_entropy)
 
         # Define optimizer
         with tf.name_scope('train'):
@@ -179,12 +153,6 @@ with tf.device(DEVICE):
                 correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(shaped_labels, 1))
             with tf.name_scope('accuracy'):
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        tf.summary.scalar('accuracy', accuracy)
-
-        # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
-        merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
-        test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'test'))
 
         # Initializing the variables
         init = tf.global_variables_initializer()
@@ -218,26 +186,22 @@ with tf.device(DEVICE):
             for i in range(total_batch):
                 batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
                 # Run optimization op (backprop) and cost op (to get loss value)
-                summary, _ = sess.run([merged, train_step], feed_dict={x: batch_x, y: batch_y})
-                train_writer.add_summary(summary, i)
+                acc,_ = sess.run([accuracy,train_step], feed_dict={x: batch_x, y: batch_y})
 
                 # Keep track of meta data
                 if i % 100 == 0:
                     #   I'm not a billion percent sure what this does....
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
-                    summary, _ = sess.run([merged, train_step],
+                    acc, _ = sess.run([accuracy, train_step],
                                           feed_dict={x: batch_x, y: batch_y},
                                           options=run_options,
                                           run_metadata=run_metadata)
-                    train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
-                    train_writer.add_summary(summary, i)
                     print('Adding run metadata for', i)
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
-                summary, acc = sess.run([merged, accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
-                test_writer.add_summary(summary, i)
+                acc = sess.run([accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
                 save_path = saver.save(sess, MODEL_PATH, global_step = epoch)
                 print('Accuracy at step %s: %s' % (epoch, acc))
         # Cleanup

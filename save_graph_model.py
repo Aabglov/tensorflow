@@ -87,7 +87,7 @@ with graph.as_default():
     # Create our 3-layer model
     hidden1 = layer(x, n_input, n_hidden_1, 'layer1')
     hidden2 = layer(hidden1, n_hidden_1, n_hidden_2, 'layer2')
-    pred =    layer(hidden2, n_hidden_2, n_classes, 'out_layer',tf.identity)
+    pred    = layer(hidden2, n_hidden_2, n_classes, 'out_layer',tf.identity)
 
     # Define loss function
     with tf.name_scope('cross_entropy'):
