@@ -27,6 +27,8 @@ DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 IMG_SIZE = 28 # Size of an image in dataset
 NUM_CHANNELS = 1
 LEARNING_RATE = 0.001
+GEN_LEARNING_RATE = 0.001
+
 # GENERATOR
 GEN_SIZE_1 = 32 # 1st layer number of features
 GEN_SIZE_2 = 256 # 2nd layer number of features
@@ -154,7 +156,7 @@ with tf.device(DEVICE):
                 pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
                 return pool
 
-        def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+        def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.tanh):
             with tf.variable_scope(layer_name) as scope:
                 # Weights
                 weights = init_weight(shape=[input_dim,output_dim],name=layer_name, sd=5e-2)
@@ -187,15 +189,20 @@ with tf.device(DEVICE):
             hidden3 = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
             # Dense Layer
             flat = tf.reshape(hidden3, [-1, hidden3.get_shape().as_list()[1] * hidden3.get_shape().as_list()[2] * HIDDEN_SIZE_3])
-            dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
-            # Logits Layer
-            logits = tf.layers.dense(inputs=dense, units=1)
+            with tf.variable_scope("dense") as scope:
+                dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
+                # Logits Layer
+                logits = tf.layers.dense(inputs=dense, units=1)
             prob = tf.nn.sigmoid(logits)
             return prob
 
-        fake_data = generator(shaped_gen_input)
-        fake_prob = discriminator(fake_data)
-        real_prob = discriminator(image_shaped_input)
+        with tf.variable_scope("generator") as scope:
+            fake_data = generator(shaped_gen_input)
+
+        with tf.variable_scope("discriminator") as scope:
+            fake_prob = discriminator(fake_data)
+            scope.reuse_variables()
+            real_prob = discriminator(image_shaped_input)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
@@ -207,7 +214,7 @@ with tf.device(DEVICE):
         # Define optimizer
         with tf.name_scope('train'):
             train_d_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(discriminator_loss)
-            train_g_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(generator_loss)
+            train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(generator_loss)
 
         # # Define and track accuracy
         # with tf.name_scope('accuracy'):
@@ -245,7 +252,6 @@ with tf.device(DEVICE):
         train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
         #test_batcher =  Batcher(TEST_DATASET, TEST_DATASET)
         total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
-        G_HARDCODED = np.array([0,1,2,3,4,5,6,7,8,9],dtype="int32")
 
         # Training cycle
         for epoch in range(MAX_STEPS):
@@ -254,8 +260,9 @@ with tf.device(DEVICE):
             # Loop over all batches
             for i in range(total_batch):
                 batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
+                G_INPUT = np.array(np.random.randint(NUM_CLASSES,size=BATCH_SIZE),dtype="int32")
                 # Run optimization op (backprop) and cost op (to get loss value)
-                summary,g_unused, _d,_g = sess.run([merged, image_shaped_gen, train_d_step, train_g_step], feed_dict={x: batch_x, y: batch_y, g: G_HARDCODED})
+                summary,g_unused, _d,_g = sess.run([merged, fake_data, train_d_step, train_g_step], feed_dict={x: batch_x, y: batch_y, g: G_INPUT})
                 train_writer.add_summary(summary, i)
 
                 # Keep track of meta data
@@ -264,7 +271,7 @@ with tf.device(DEVICE):
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
                     summary, _d,_g = sess.run([merged, train_d_step, train_g_step],
-                                          feed_dict={x: batch_x, y: batch_y, g: G_HARDCODED},
+                                          feed_dict={x: batch_x, y: batch_y, g: G_INPUT},
                                           options=run_options,
                                           run_metadata=run_metadata)
                     train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
@@ -273,7 +280,8 @@ with tf.device(DEVICE):
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
-                summary = sess.run([merged], feed_dict={x: TEST_DATASET, y: TEST_LABELS, g: G_HARDCODED})
+                G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(TEST_DATASET)),dtype="int32")
+                summary = sess.run([merged], feed_dict={x: TEST_DATASET, y: TEST_LABELS, g: G_TEST})
                 test_writer.add_summary(summary, i)
                 save_path = saver.save(sess, MODEL_PATH, global_step = epoch)
                 print('Step %s' % epoch)
