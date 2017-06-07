@@ -4,6 +4,9 @@ import pickle
 import os
 import time
 
+from tensorflow.examples.tutorials.mnist import input_data
+mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
@@ -30,7 +33,8 @@ LEARNING_RATE = 0.001
 GEN_LEARNING_RATE = 0.001
 
 # GENERATOR
-GEN_SIZE_1 = 32 # 1st layer number of features
+GEN_SIZE_IN = 100
+GEN_SIZE_1 = 128 # 1st layer number of features
 GEN_SIZE_2 = 256 # 2nd layer number of features
 GEN_SIZE_3 = IMG_SIZE * IMG_SIZE # final layer
 # DISCRIMINATOR
@@ -108,19 +112,20 @@ with tf.device(DEVICE):
 
         # Input placeholders
         with tf.name_scope('input'):
-            x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
-            g = tf.placeholder(tf.int32, [None,] , name="generator_input") # One hot encoded input
-            y = tf.placeholder(tf.int32, [None,], name='y-input')
+            x = tf.placeholder(tf.float32, [None, IMG_SIZE * IMG_SIZE], name='x-input')
+            g = tf.placeholder(tf.float32, [None,GEN_SIZE_IN] , name="generator_input") # Random input vector
+            #y = tf.placeholder(tf.int32, [None,], name='y-input') # Labels
 
         with tf.name_scope('input_reshape'):
             image_shaped_input = tf.reshape(x,[-1,IMG_SIZE, IMG_SIZE, 1])
             tf.summary.image('input', image_shaped_input, NUM_CLASSES)
-            shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
-            shaped_gen_input = tf.one_hot(g,NUM_CLASSES)
+            #shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
 
         # We can't initialize these variables to 0 - the network will get stuck.
-        def init_weight(shape,name,sd=0.1):
+        def init_weight(shape,name,sd=None):
             """Create a weight variable with appropriate initialization."""
+            if not sd:
+                sd = 1. / tf.sqrt(shape[0] / 2.)
             initial = tf.truncated_normal(shape, stddev=sd)
             return tf.get_variable(name="{}_weights".format(name), initializer=initial)
             #return tf.Variable(initial)
@@ -133,14 +138,6 @@ with tf.device(DEVICE):
 
         def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, act=tf.nn.relu):
             with tf.variable_scope(layer_name) as scope:
-                # Convolution
-                # conv = tf.layers.conv2d(
-                #   inputs=input_tensor,
-                #   filters=output_dim,
-                #   kernel_size=kernel_shape,
-                #   padding="same",
-                #   activation=act)
-
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
                 #variable_summaries(kernel)
                 conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='SAME')
@@ -148,7 +145,7 @@ with tf.device(DEVICE):
                 #variable_summaries(biases)
                 pre_activation = tf.nn.bias_add(conv, biases)
                 tf.summary.histogram('conv_pre_activations', pre_activation)
-                conv = tf.nn.relu(pre_activation, name=scope.name)
+                conv = act(pre_activation, name=scope.name)
                 tf.summary.histogram('conv_activations',conv)
                 #image_shaped_conv_first = tf.reshape(kernel,[output_dim * channel_dim] + kernel_shape + [1])
                 #tf.summary.image('{}_conv'.format(layer_name), image_shaped_conv_first, 8)
@@ -156,10 +153,10 @@ with tf.device(DEVICE):
                 pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
                 return pool
 
-        def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.tanh):
+        def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.sigmoid):
             with tf.variable_scope(layer_name) as scope:
                 # Weights
-                weights = init_weight(shape=[input_dim,output_dim],name=layer_name, sd=5e-2)
+                weights = init_weight(shape=[input_dim,output_dim],name=layer_name)
                 #variable_summaries(weights)
                 # Biases
                 biases = init_bias([output_dim], name=layer_name, c=0.0)
@@ -175,15 +172,16 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR
         def generator(gen_input):
-            gen1 = linearLayer(shaped_gen_input, NUM_CLASSES,GEN_SIZE_1, 'gen_layer1')
+            gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1')
             gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2')
             gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3, 'gen_layer3')
             image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE, IMG_SIZE, 1])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
+            #return gen2
             return image_shaped_gen
 
         # DEFINE DISCRIMINATOR
-        def discriminator(input_tensor):
+        def discriminatorConv(input_tensor):
             hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, 1, HIDDEN_SIZE_1, 'layer1')
             hidden2 = convLayer(hidden1, KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2')
             hidden3 = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
@@ -196,13 +194,20 @@ with tf.device(DEVICE):
             prob = tf.nn.sigmoid(logits)
             return prob
 
+        def discriminator(input_tensor):
+            dis1 = linearLayer(input_tensor,GEN_SIZE_3, GEN_SIZE_1, 'dis_layer1')
+            dis2 = linearLayer(dis1, GEN_SIZE_1, 1, 'dis_layer2')
+            return dis2
+
+
         with tf.variable_scope("generator") as scope:
-            fake_data = generator(shaped_gen_input)
+            fake_data = generator(g)
 
         with tf.variable_scope("discriminator") as scope:
-            fake_prob = discriminator(fake_data)
+            fake_prob = discriminatorConv(fake_data)
             scope.reuse_variables()
-            real_prob = discriminator(image_shaped_input)
+            real_prob = discriminatorConv(image_shaped_input)
+            #real_prob = discriminator(x)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
@@ -213,8 +218,12 @@ with tf.device(DEVICE):
 
         # Define optimizer
         with tf.name_scope('train'):
-            train_d_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(discriminator_loss)
-            train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(generator_loss)
+            # Only update the variables associated with each network
+            #   If we update the discriminator while optimizing the generator it will lose the ability to discriminate
+            #   and our generator will no longer have an adversary.
+            #   The same is true of the generator.
+            train_d_step = tf.train.AdamOptimizer().minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
+            train_g_step = tf.train.AdamOptimizer().minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
 
         # # Define and track accuracy
         # with tf.name_scope('accuracy'):
@@ -237,7 +246,7 @@ with tf.device(DEVICE):
 
     #Running first session
     #def main():
-    with tf.Session(graph=graph,config=tf.ConfigProto(log_device_placement=True)) as sess:
+    with tf.Session(graph=graph) as sess:#,config=tf.ConfigProto(log_device_placement=True)) as sess:
         # Initialize variables
         sess.run(init)
 
@@ -249,9 +258,10 @@ with tf.device(DEVICE):
         except Exception as e:
             print("Model restore failed {}".format(e))
 
-        train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
-        #test_batcher =  Batcher(TEST_DATASET, TEST_DATASET)
-        total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
+        #train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
+        #total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
+
+        total_batch = int(mnist.train.num_examples/BATCH_SIZE)
 
         # Training cycle
         for epoch in range(MAX_STEPS):
@@ -259,10 +269,11 @@ with tf.device(DEVICE):
 
             # Loop over all batches
             for i in range(total_batch):
-                batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
-                G_INPUT = np.array(np.random.randint(NUM_CLASSES,size=BATCH_SIZE),dtype="int32")
+                #batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
+                batch_x, batch_y  = mnist.train.next_batch(BATCH_SIZE)
+                G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
                 # Run optimization op (backprop) and cost op (to get loss value)
-                summary,g_unused, _d,_g = sess.run([merged, fake_data, train_d_step, train_g_step], feed_dict={x: batch_x, y: batch_y, g: G_INPUT})
+                summary,g_unused, _d,_g = sess.run([merged, fake_data, train_d_step, train_g_step], feed_dict={x: batch_x, g: G_INPUT})
                 train_writer.add_summary(summary, i)
 
                 # Keep track of meta data
@@ -271,7 +282,7 @@ with tf.device(DEVICE):
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
                     summary, _d,_g = sess.run([merged, train_d_step, train_g_step],
-                                          feed_dict={x: batch_x, y: batch_y, g: G_INPUT},
+                                          feed_dict={x: batch_x, g: G_INPUT},
                                           options=run_options,
                                           run_metadata=run_metadata)
                     train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
@@ -280,19 +291,17 @@ with tf.device(DEVICE):
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
-                G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(TEST_DATASET)),dtype="int32")
-                summary = sess.run([merged], feed_dict={x: TEST_DATASET, y: TEST_LABELS, g: G_TEST})
-                test_writer.add_summary(summary, i)
+                #G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(TEST_DATASET)),dtype="int32")
+                #G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(mnist.test.images)),dtype="int32")
+                #summary = sess.run([merged], feed_dict={x: TEST_DATASET, y: TEST_LABELS, g: G_TEST})
+                #summary,_g = sess.run([merged, fake_data], feed_dict={x: mnist.test.images, g: G_TEST})
+                #test_writer.add_summary(summary, i)
                 save_path = saver.save(sess, MODEL_PATH, global_step = epoch)
                 print('Step %s' % epoch)
         # Cleanup
         train_writer.close()
         test_writer.close()
         print("Training Finished!")
-
-        # Test model
-        _,acc = sess.run([correct_prediction,accuracy], feed_dict={x: TEST_DATASET, y: TEST_LABELS})
-        print("Accuracy:", acc)
 
         # Save model weights to disk
         save_path = saver.save(sess, SAVE_PATH)
