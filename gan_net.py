@@ -172,8 +172,8 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR
         def generator(gen_input):
-            gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1')
-            gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2')
+            gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
+            gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
             gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3, 'gen_layer3')
             image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE, IMG_SIZE, 1])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
