@@ -136,7 +136,7 @@ with tf.device(DEVICE):
             return  tf.get_variable(name="{}_bias".format(name), initializer=initial)
             #return tf.Variable(initial)
 
-        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, act=tf.nn.relu):
+        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, act=tf.nn.sigmoid):
             with tf.variable_scope(layer_name) as scope:
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
                 #variable_summaries(kernel)
@@ -144,9 +144,9 @@ with tf.device(DEVICE):
                 biases = init_bias([output_dim], name=layer_name, c=0.0)
                 #variable_summaries(biases)
                 pre_activation = tf.nn.bias_add(conv, biases)
-                tf.summary.histogram('conv_pre_activations', pre_activation)
+                #tf.summary.histogram('conv_pre_activations', pre_activation)
                 conv = act(pre_activation, name=scope.name)
-                tf.summary.histogram('conv_activations',conv)
+                #tf.summary.histogram('conv_activations',conv)
                 #image_shaped_conv_first = tf.reshape(kernel,[output_dim * channel_dim] + kernel_shape + [1])
                 #tf.summary.image('{}_conv'.format(layer_name), image_shaped_conv_first, 8)
                 # Pooling
@@ -164,26 +164,26 @@ with tf.device(DEVICE):
                 # Pre-Activations
                 lin = tf.matmul(input_tensor, weights)
                 pre_activation = tf.nn.bias_add(lin, biases)
-                tf.summary.histogram('lin_pre_activations', pre_activation)
+                #tf.summary.histogram('lin_pre_activations', pre_activation)
                 # Activations
                 activations = act(pre_activation, name=scope.name)
-                tf.summary.histogram('lin_activations',activations)
+                #tf.summary.histogram('lin_activations',activations)
                 return activations
 
         # DEFINE GENERATOR
         def generator(gen_input):
             gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
-            gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
-            gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3, 'gen_layer3')
-            image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE, IMG_SIZE, 1])
+            gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_3, 'gen_layer2')#, act=tf.nn.relu)
+            #gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3, 'gen_layer3')
+            image_shaped_gen = tf.reshape(gen2,[-1,IMG_SIZE, IMG_SIZE, 1])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
             return image_shaped_gen
 
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
-            hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, 1, HIDDEN_SIZE_1, 'layer1')
-            hidden2 = convLayer(hidden1, KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2')
+            hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, 1, HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
+            hidden2 = convLayer(hidden1, KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
             hidden3 = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
             # Dense Layer
             flat = tf.reshape(hidden3, [-1, hidden3.get_shape().as_list()[1] * hidden3.get_shape().as_list()[2] * HIDDEN_SIZE_3])
@@ -195,9 +195,10 @@ with tf.device(DEVICE):
             return prob
 
         def discriminator(input_tensor):
-            dis1 = linearLayer(input_tensor,GEN_SIZE_3, GEN_SIZE_1, 'dis_layer1')
-            dis2 = linearLayer(dis1, GEN_SIZE_1, 1, 'dis_layer2')
-            return dis2
+            dis1 = linearLayer(input_tensor,GEN_SIZE_3, GEN_SIZE_2, 'dis_layer1', act=tf.nn.relu)
+            dis2 = linearLayer(dis1,GEN_SIZE_2, GEN_SIZE_1, 'dis_layer2')
+            dis3 = linearLayer(dis2, GEN_SIZE_1, 1, 'dis_layer3')
+            return dis3
 
 
         with tf.variable_scope("generator") as scope:
@@ -205,6 +206,7 @@ with tf.device(DEVICE):
 
         with tf.variable_scope("discriminator") as scope:
             fake_prob = discriminatorConv(fake_data)
+            #fake_prob = discriminator(fake_data)
             scope.reuse_variables()
             real_prob = discriminatorConv(image_shaped_input)
             #real_prob = discriminator(x)
