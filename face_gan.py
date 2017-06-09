@@ -12,7 +12,7 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
 MODEL_PATH = os.path.join(DIR_PATH,"saved","conv","model_steps.ckpt")
 LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
-DATA_PATH = os.path.join(DIR_PATH,"data","notMNIST.pkl")
+DATA_PATH = os.path.join(DIR_PATH,"data","celeb")
 
 
 # Set random seed
@@ -28,15 +28,19 @@ tf.gfile.MakeDirs(LOG_DIR)
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 IMG_SIZE = 28 # Size of an image in dataset
-NUM_CHANNELS = 1
+NUM_CHANNELS = 3
 LEARNING_RATE = 0.001
 GEN_LEARNING_RATE = 0.001
+IMG_SIZE1 = 178
+IMG_SIZE2 = 218
+
 
 # GENERATOR
-GEN_SIZE_IN = 100
+GEN_SIZE_IN = 1000
 GEN_SIZE_1 = 128 # 1st layer number of features
 GEN_SIZE_2 = 256 # 2nd layer number of features
-GEN_SIZE_3 = IMG_SIZE * IMG_SIZE # final layer
+GEN_SIZE_3 = IMG_SIZE1 * IMG_SIZE2 # final layer
+
 # DISCRIMINATOR
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
 HIDDEN_SIZE_2 = 64 # 2nd layer number of features
@@ -44,7 +48,6 @@ HIDDEN_SIZE_3 = 128 # 3rd layer
 HIDDEN_SIZE_4 = 1024 # Dense layer -- ouput
 KERNEL_SIZE_1 = [10,10]
 KERNEL_SIZE_2 = [5,5]
-NUM_CLASSES = 10 # MNIST total classes (0-9 digits)
 
 BATCH_SIZE = 100
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
@@ -52,29 +55,68 @@ NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 MAX_STEPS = 100
 LOG_FREQUENCY = 1
 
-# Constants describing the training process.
-#MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
-#NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
-#LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
-#INITIAL_LEARNING_RATE = 0.1
 
-# LOAD DATA
-with open(DATA_PATH,"rb") as f:
-    data = pickle.load(f)
-TRAIN_DATASET = data["train_dataset"]
-TRAIN_LABELS = data["train_labels"]
-TEST_DATASET = data["test_dataset"]
-TEST_LABELS = data["test_labels"]
-VALID_DATASET = data["valid_dataset"]
-VALID_LABELS = data["valid_labels"]
+################################# SIZE TESTING ####################################################
+##def init_weight(shape,name,sd=None):
+##            """Create a weight variable with appropriate initialization."""
+##            if not sd:
+##                sd = 1. / tf.sqrt(shape[0] / 2.)
+##            initial = tf.truncated_normal(shape, stddev=sd)
+##            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
+##
+##input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
+##kernel = init_weight([10,10,3,16],"kernel")
+##conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='VALID')#'SAME')
+##pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
+##
+##kernel2 = init_weight([10,10,16,64],"kernel2")
+##conv2 = tf.nn.conv2d(pool, kernel2, [1, 1, 1, 1], padding='VALID')#'SAME')
+##pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=3)
+##
+##kernel3 = init_weight([10,10,64,128],"kernel3")
+##conv3 = tf.nn.conv2d(pool2, kernel3, [1, 1, 1, 1], padding='VALID')#'SAME')
+##pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=3)
 
+
+# Make a queue of file names including all the JPEG images files in the relative
+# image directory.
+filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(DATA_PATH,"*.jpg")))
+
+# Read an entire image file which is required since they're JPEGs, if the images
+# are too large they could be split in advance to smaller files or use the Fixed
+# reader to split up the file.
+image_reader = tf.WholeFileReader()
+
+# Read a whole file from the queue
+filename, image_file = image_reader.read(filename_queue)
+
+# Decode the image as a JPEG file, this will turn it into a Tensor which we can
+# then use in training.
+image = tf.image.decode_jpeg(image_file)
+
+with tf.Session() as sess:
+    # Required to get the filename matching to run.
+    tf.global_variables_initializer().run()
+
+    # Coordinate the loading of image files.
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(coord=coord)
+
+    # Get an image tensor and print its value.
+    for _ in range(10):
+        key,image_tensor = sess.run([filename,image])
+        print(k)
+        #print(image_tensor)
+
+HODOR
+########################################################################################################
 
 
 class Batcher:
-    def __init__(self,dataset,labels):
+    def __init__(self,path):
         self.counter = 0
-        self.dataset = dataset
-        self.labels = labels
+        self.path = path
+        self.file_names = [f for f in os.listdir(self.path) if os.path.isfile(os.path.join(self.path, f)) and f[-4:] == ".jpg"]
 
     def nextBatch(self,batch_size):
         batch = self.dataset[self.counter:self.counter+batch_size],self.labels[self.counter:self.counter+batch_size]
@@ -140,7 +182,7 @@ with tf.device(DEVICE):
             with tf.variable_scope(layer_name) as scope:
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
                 #variable_summaries(kernel)
-                conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='SAME')
+                conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='VALID')#'SAME')
                 biases = init_bias([output_dim], name=layer_name, c=0.0)
                 #variable_summaries(biases)
                 pre_activation = tf.nn.bias_add(conv, biases)
@@ -183,7 +225,7 @@ with tf.device(DEVICE):
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
             hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, 1, HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
-            hidden2 = convLayer(hidden1, KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
+            hidden2 = convLayer(hidden1, KERNEL_SIZE_1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
             hidden3 = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
             # Dense Layer
             flat = tf.reshape(hidden3, [-1, hidden3.get_shape().as_list()[1] * hidden3.get_shape().as_list()[2] * HIDDEN_SIZE_3])
