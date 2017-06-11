@@ -27,18 +27,17 @@ tf.gfile.MakeDirs(LOG_DIR)
 ######################################### CONSTANTS ########################################
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
-IMG_SIZE = 28 # Size of an image in dataset
 NUM_CHANNELS = 3
 LEARNING_RATE = 0.001
 GEN_LEARNING_RATE = 0.001
-IMG_SIZE1 = 178
-IMG_SIZE2 = 218
+IMG_SIZE1 = 218
+IMG_SIZE2 = 178
 
 
 # GENERATOR
-GEN_SIZE_IN = 1000
-GEN_SIZE_1 = 128 # 1st layer number of features
-GEN_SIZE_2 = 256 # 2nd layer number of features
+GEN_SIZE_IN = 1024
+GEN_SIZE_1 = 2048 # 1st layer number of features
+GEN_SIZE_2 = 4096 # 2nd layer number of features
 GEN_SIZE_3 = IMG_SIZE1 * IMG_SIZE2 # final layer
 
 # DISCRIMINATOR
@@ -52,30 +51,30 @@ KERNEL_SIZE_2 = [5,5]
 BATCH_SIZE = 100
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
-MAX_STEPS = 100
+MAX_STEPS = 1000
 LOG_FREQUENCY = 1
 
 
 ################################# SIZE TESTING ####################################################
-##def init_weight(shape,name,sd=None):
-##            """Create a weight variable with appropriate initialization."""
-##            if not sd:
-##                sd = 1. / tf.sqrt(shape[0] / 2.)
-##            initial = tf.truncated_normal(shape, stddev=sd)
-##            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
-##
-##input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
-##kernel = init_weight([10,10,3,16],"kernel")
-##conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='VALID')#'SAME')
-##pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
-##
-##kernel2 = init_weight([10,10,16,64],"kernel2")
-##conv2 = tf.nn.conv2d(pool, kernel2, [1, 1, 1, 1], padding='VALID')#'SAME')
-##pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=3)
-##
-##kernel3 = init_weight([10,10,64,128],"kernel3")
-##conv3 = tf.nn.conv2d(pool2, kernel3, [1, 1, 1, 1], padding='VALID')#'SAME')
-##pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=3)
+# def init_weight(shape,name,sd=None):
+#            """Create a weight variable with appropriate initialization."""
+#            if not sd:
+#                sd = 1. / tf.sqrt(shape[0] / 2.)
+#            initial = tf.truncated_normal(shape, stddev=sd)
+#            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
+#
+# input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
+# kernel = init_weight([10,10,3,16],"kernel")
+# conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='VALID')#'SAME')
+# pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[5,5], strides=5)
+#
+# kernel2 = init_weight([10,10,16,64],"kernel2")
+# conv2 = tf.nn.conv2d(pool, kernel2, [1, 1, 1, 1], padding='VALID')#'SAME')
+# pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[5,5], strides=5)
+
+#kernel3 = init_weight([10,10,64,128],"kernel3")
+#conv3 = tf.nn.conv2d(pool2, kernel3, [1, 1, 1, 1], padding='VALID')#'SAME')
+#pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=3)
 
 
 # Make a queue of file names including all the JPEG images files in the relative
@@ -94,35 +93,21 @@ filename, image_file = image_reader.read(filename_queue)
 # then use in training.
 image = tf.image.decode_jpeg(image_file)
 
-with tf.Session() as sess:
-    # Required to get the filename matching to run.
-    tf.global_variables_initializer().run()
-
-    # Coordinate the loading of image files.
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(coord=coord)
-
-    # Get an image tensor and print its value.
-    for _ in range(10):
-        key,image_tensor = sess.run([filename,image])
-        print(k)
-        #print(image_tensor)
-
-HODOR
-########################################################################################################
-
-
-class Batcher:
-    def __init__(self,path):
-        self.counter = 0
-        self.path = path
-        self.file_names = [f for f in os.listdir(self.path) if os.path.isfile(os.path.join(self.path, f)) and f[-4:] == ".jpg"]
-
-    def nextBatch(self,batch_size):
-        batch = self.dataset[self.counter:self.counter+batch_size],self.labels[self.counter:self.counter+batch_size]
-        self.counter = (self.counter + batch_size) % len(self.labels)
-        return batch
-
+# with tf.Session() as sess:
+#     # Required to get the filename matching to run.
+#     tf.global_variables_initializer().run()
+#
+#     # Coordinate the loading of image files.
+#     coord = tf.train.Coordinator()
+#     threads = tf.train.start_queue_runners(coord=coord)
+#
+#     # Get an image tensor and print its value.
+#     for _ in range(10):
+#         key,image_tensor = sess.run([filename,image])
+#         print(k)
+#         #print(image_tensor)
+#
+# HODOR
 
 ######################################### UTILITY FUNCTIONS ########################################
 with tf.device(DEVICE):
@@ -151,15 +136,31 @@ with tf.device(DEVICE):
     graph = tf.Graph()
     with graph.as_default():
         # tf Graph input
+        # Make a queue of file names including all the JPEG images files in the relative
+        # image directory.
+        filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(DATA_PATH,"*.jpg")))
+
+        # Read an entire image file which is required since they're JPEGs, if the images
+        # are too large they could be split in advance to smaller files or use the Fixed
+        # reader to split up the file.
+        image_reader = tf.WholeFileReader()
+
+        # Read a whole file from the queue
+        filename, image_file = image_reader.read(filename_queue)
+
+        # Decode the image as a JPEG file, this will turn it into a Tensor which we can
+        # then use in training.
+        image = tf.image.decode_jpeg(image_file)
 
         # Input placeholders
         with tf.name_scope('input'):
-            x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
+            #x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
+            x = tf.image.per_image_standardization(image)
             g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
             #y = tf.placeholder(tf.int32, [None,], name='y-input') # Labels
 
         with tf.name_scope('input_reshape'):
-            image_shaped_input = tf.reshape(x,[-1,IMG_SIZE, IMG_SIZE, 1])
+            image_shaped_input = tf.reshape(x,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('input', image_shaped_input, NUM_CLASSES)
             #shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
 
@@ -178,7 +179,7 @@ with tf.device(DEVICE):
             return  tf.get_variable(name="{}_bias".format(name), initializer=initial)
             #return tf.Variable(initial)
 
-        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, act=tf.nn.sigmoid):
+        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, pool_size=5, act=tf.nn.sigmoid):
             with tf.variable_scope(layer_name) as scope:
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
                 #variable_summaries(kernel)
@@ -192,7 +193,7 @@ with tf.device(DEVICE):
                 #image_shaped_conv_first = tf.reshape(kernel,[output_dim * channel_dim] + kernel_shape + [1])
                 #tf.summary.image('{}_conv'.format(layer_name), image_shaped_conv_first, 8)
                 # Pooling
-                pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3, 3], strides=3)
+                pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
                 return pool
 
         def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.sigmoid):
@@ -216,19 +217,19 @@ with tf.device(DEVICE):
         def generator(gen_input):
             gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
             gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
-            gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3, 'gen_layer3')
-            image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE, IMG_SIZE, 1])
-            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
+            gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3 * NUM_CHANNELS, 'gen_layer3')
+            image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            tf.summary.image('generated_input', image_shaped_gen, 5)
             #return gen2
             return image_shaped_gen
 
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
-            hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, 1, HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
-            hidden2 = convLayer(hidden1, KERNEL_SIZE_1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
-            hidden3 = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
+            hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, NUM_CHANNELS, HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
+            hidden_out = convLayer(hidden1, KERNEL_SIZE_1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
+            #hidden_out = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
             # Dense Layer
-            flat = tf.reshape(hidden3, [-1, hidden3.get_shape().as_list()[1] * hidden3.get_shape().as_list()[2] * HIDDEN_SIZE_3])
+            flat = tf.reshape(hidden_out, [-1, hidden_out.get_shape().as_list()[1] * hidden_out.get_shape().as_list()[2] * HIDDEN_SIZE_2])
             with tf.variable_scope("dense") as scope:
                 dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
                 # Logits Layer
@@ -301,39 +302,33 @@ with tf.device(DEVICE):
         except Exception as e:
             print("Model restore failed {}".format(e))
 
-        train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
-        total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
-        #total_batch = int(mnist.train.num_examples/BATCH_SIZE)
+        #train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
+        #total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
+        total_batch = 10
+        #Coordinate the loading of image files.
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord)
 
         # Training cycle
         for epoch in range(MAX_STEPS):
             avg_cost = 0.
 
-
-            G_TEST = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
-            #G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(mnist.test.images)),dtype="int32")
-            summary, _g = sess.run([merged, fake_data], feed_dict={x: TEST_DATASET[:BATCH_SIZE], g: G_TEST})
-            #summary,_g = sess.run([merged, fake_data], feed_dict={x: mnist.test.images, g: G_TEST})
-            test_writer.add_summary(summary, 0)
-            #save_path = saver.save(sess, MODEL_PATH, global_step = epoch)
-            print('Step %s' % epoch)
-
             # Loop over all batches
             for i in range(total_batch):
-                batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
+                #batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
                 #batch_x, batch_y  = mnist.train.next_batch(BATCH_SIZE)
-                G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
+                G_INPUT = np.random.uniform(-1., 1., size=[1,GEN_SIZE_IN])
                 # Run optimization op (backprop) and cost op (to get loss value)
-                summary,g_unused, _d,_g = sess.run([merged, fake_data, train_d_step, train_g_step], feed_dict={x: batch_x, g: G_INPUT})
+                summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
                 train_writer.add_summary(summary, i)
 
                 # Keep track of meta data
-                if i % 100 == 0:
+                if i % 1 == 0:
                     #   I'm not a billion percent sure what this does....
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
-                    summary, _d,_g = sess.run([merged, train_d_step, train_g_step],
-                                          feed_dict={x: batch_x, g: G_INPUT},
+                    summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
+                                          feed_dict={g: G_INPUT},
                                           options=run_options,
                                           run_metadata=run_metadata)
                     train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
@@ -342,11 +337,11 @@ with tf.device(DEVICE):
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
-                G_TEST = np.random.uniform(-1., 1., size=[len(TEST_DATASET),GEN_SIZE_IN])
+                #G_TEST = np.random.uniform(-1., 1., size=[len(TEST_DATASET),GEN_SIZE_IN])
                 #G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(mnist.test.images)),dtype="int32")
-                summary, _g = sess.run([merged, fake_data], feed_dict={x: TEST_DATASET, g: G_TEST})
+                #summary, _g = sess.run([merged, fake_data], feed_dict={x: TEST_DATASET, g: G_TEST})
                 #summary,_g = sess.run([merged, fake_data], feed_dict={x: mnist.test.images, g: G_TEST})
-                test_writer.add_summary(summary, i)
+                #test_writer.add_summary(summary, i)
                 save_path = saver.save(sess, SAVE_PATH, global_step = epoch)
                 print('Step %s' % epoch)
         # Cleanup
