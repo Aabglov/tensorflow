@@ -215,9 +215,12 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR
         def generator(gen_input):
-            gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
-            gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
-            gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3 * NUM_CHANNELS, 'gen_layer3')
+            #gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
+            #gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
+            #gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3 * NUM_CHANNELS, 'gen_layer3')
+            gen1 = tf.layers.dense(inputs=gen_input, units=GEN_SIZE_1, activation=tf.nn.relu)
+            gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.relu)
+            gen3 = tf.layers.dense(inputs=gen2,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.nn.sigmoid)
             image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, 5)
             #return gen2
