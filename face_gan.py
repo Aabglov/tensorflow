@@ -28,31 +28,29 @@ tf.gfile.MakeDirs(LOG_DIR)
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 NUM_CHANNELS = 3
-LEARNING_RATE = 0.001
-GEN_LEARNING_RATE = 0.001
+DIS_LEARNING_RATE = 0.001
+GEN_LEARNING_RATE = 0.01
 IMG_SIZE1 = 218
 IMG_SIZE2 = 178
 
 
 # GENERATOR
-GEN_SIZE_IN = 1024
-GEN_SIZE_1 = 2048 # 1st layer number of features
-GEN_SIZE_2 = 4096 # 2nd layer number of features
+GEN_SIZE_IN = 100
+GEN_SIZE_1 = 200 # 1st layer number of features
+GEN_SIZE_2 = 1000 # 2nd layer number of features
 GEN_SIZE_3 = IMG_SIZE1 * IMG_SIZE2 # final layer
 
 # DISCRIMINATOR
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
 HIDDEN_SIZE_2 = 64 # 2nd layer number of features
 HIDDEN_SIZE_3 = 128 # 3rd layer
-HIDDEN_SIZE_4 = 1024 # Dense layer -- ouput
+HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
 KERNEL_SIZE_1 = [10,10]
 KERNEL_SIZE_2 = [5,5]
 
 BATCH_SIZE = 100
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
-NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 MAX_STEPS = 1000
-LOG_FREQUENCY = 1
+LOG_FREQUENCY = 100
 
 
 ################################# SIZE TESTING ####################################################
@@ -79,19 +77,19 @@ LOG_FREQUENCY = 1
 
 # Make a queue of file names including all the JPEG images files in the relative
 # image directory.
-filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(DATA_PATH,"*.jpg")))
+#filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(DATA_PATH,"*.jpg")))
 
 # Read an entire image file which is required since they're JPEGs, if the images
 # are too large they could be split in advance to smaller files or use the Fixed
 # reader to split up the file.
-image_reader = tf.WholeFileReader()
+#image_reader = tf.WholeFileReader()
 
 # Read a whole file from the queue
-filename, image_file = image_reader.read(filename_queue)
+#filename, image_file = image_reader.read(filename_queue)
 
 # Decode the image as a JPEG file, this will turn it into a Tensor which we can
 # then use in training.
-image = tf.image.decode_jpeg(image_file)
+#image = tf.image.decode_jpeg(image_file)
 
 # with tf.Session() as sess:
 #     # Required to get the filename matching to run.
@@ -145,17 +143,31 @@ with tf.device(DEVICE):
         # reader to split up the file.
         image_reader = tf.WholeFileReader()
 
+
         # Read a whole file from the queue
         filename, image_file = image_reader.read(filename_queue)
 
         # Decode the image as a JPEG file, this will turn it into a Tensor which we can
         # then use in training.
-        image = tf.image.decode_jpeg(image_file)
+        image_orig = tf.image.decode_jpeg(image_file)
+        image_std = tf.image.per_image_standardization(image_orig)
+        image = tf.image.resize_images(image_std, [IMG_SIZE1, IMG_SIZE2])
+        image.set_shape((IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS))
+
+        # Generate batch
+        NUM_PROCESS_THREADS = 1
+        MIN_QUEUE_EXAMPLES = 256
+        images = tf.train.shuffle_batch(
+            [image],
+            batch_size=BATCH_SIZE,
+            num_threads=NUM_PROCESS_THREADS,
+            capacity=MIN_QUEUE_EXAMPLES + NUM_CHANNELS * BATCH_SIZE,
+            min_after_dequeue=MIN_QUEUE_EXAMPLES)
 
         # Input placeholders
         with tf.name_scope('input'):
             #x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
-            x = tf.image.per_image_standardization(image)
+            x = images
             g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
             #y = tf.placeholder(tf.int32, [None,], name='y-input') # Labels
 
@@ -196,33 +208,13 @@ with tf.device(DEVICE):
                 pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
                 return pool
 
-        def linearLayer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.sigmoid):
-            with tf.variable_scope(layer_name) as scope:
-                # Weights
-                weights = init_weight(shape=[input_dim,output_dim],name=layer_name)
-                #variable_summaries(weights)
-                # Biases
-                biases = init_bias([output_dim], name=layer_name, c=0.0)
-                #variable_summaries(biases)
-                # Pre-Activations
-                lin = tf.matmul(input_tensor, weights)
-                pre_activation = tf.nn.bias_add(lin, biases)
-                #tf.summary.histogram('lin_pre_activations', pre_activation)
-                # Activations
-                activations = act(pre_activation, name=scope.name)
-                #tf.summary.histogram('lin_activations',activations)
-                return activations
-
         # DEFINE GENERATOR
         def generator(gen_input):
-            #gen1 = linearLayer(gen_input, GEN_SIZE_IN, GEN_SIZE_1, 'gen_layer1', act=tf.nn.relu)
-            #gen2 = linearLayer(gen1, GEN_SIZE_1, GEN_SIZE_2, 'gen_layer2', act=tf.nn.relu)
-            #gen3 = linearLayer(gen2, GEN_SIZE_2, GEN_SIZE_3 * NUM_CHANNELS, 'gen_layer3')
-            gen1 = tf.layers.dense(inputs=gen_input, units=GEN_SIZE_1, activation=tf.nn.relu)
-            gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.relu)
-            gen3 = tf.layers.dense(inputs=gen2,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.nn.sigmoid)
+            gen1 = tf.layers.dense(inputs=gen_input, units=GEN_SIZE_1, activation=tf.nn.sigmoid)
+            gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
+            gen3 = tf.layers.dense(inputs=gen2,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.identity)
             image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            tf.summary.image('generated_input', image_shaped_gen, 5)
+            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
             return image_shaped_gen
 
@@ -270,8 +262,8 @@ with tf.device(DEVICE):
             #   If we update the discriminator while optimizing the generator it will lose the ability to discriminate
             #   and our generator will no longer have an adversary.
             #   The same is true of the generator.
-            train_d_step = tf.train.AdamOptimizer().minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
-            train_g_step = tf.train.AdamOptimizer().minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
+            train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
+            train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
 
         # # Define and track accuracy
         # with tf.name_scope('accuracy'):
@@ -307,7 +299,7 @@ with tf.device(DEVICE):
 
         #train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
         #total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
-        total_batch = 10
+        total_batch = 1
         #Coordinate the loading of image files.
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
@@ -320,23 +312,24 @@ with tf.device(DEVICE):
             for i in range(total_batch):
                 #batch_x, batch_y = train_batcher.nextBatch(BATCH_SIZE)
                 #batch_x, batch_y  = mnist.train.next_batch(BATCH_SIZE)
-                G_INPUT = np.random.uniform(-1., 1., size=[1,GEN_SIZE_IN])
+                G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
                 # Run optimization op (backprop) and cost op (to get loss value)
                 summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
                 train_writer.add_summary(summary, i)
+                print('Adding run metadata for', i)
 
                 # Keep track of meta data
-                if i % 1 == 0:
-                    #   I'm not a billion percent sure what this does....
-                    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                    run_metadata = tf.RunMetadata()
-                    summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
-                                          feed_dict={g: G_INPUT},
-                                          options=run_options,
-                                          run_metadata=run_metadata)
-                    train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
-                    train_writer.add_summary(summary, i)
-                    print('Adding run metadata for', i)
+                # if i % 1 == 0:
+                #     #   I'm not a billion percent sure what this does....
+                #     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                #     run_metadata = tf.RunMetadata()
+                #     summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
+                #                           feed_dict={g: G_INPUT},
+                #                           options=run_options,
+                #                           run_metadata=run_metadata)
+                #     train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
+                #     train_writer.add_summary(summary, i)
+                #     print('Adding run metadata for', i)
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
