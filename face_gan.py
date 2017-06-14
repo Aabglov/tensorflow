@@ -29,15 +29,15 @@ NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 NUM_CHANNELS = 3
 DIS_LEARNING_RATE = 0.001
-GEN_LEARNING_RATE = 0.01
+GEN_LEARNING_RATE = 0.001
 IMG_SIZE1 = 218
 IMG_SIZE2 = 178
 
 
 # GENERATOR
-GEN_SIZE_IN = 100
-GEN_SIZE_1 = 200 # 1st layer number of features
-GEN_SIZE_2 = 1000 # 2nd layer number of features
+GEN_SIZE_IN = 1024
+GEN_SIZE_1 = 2000 # 1st layer number of features
+GEN_SIZE_2 = 2000 # 2nd layer number of features
 GEN_SIZE_3 = IMG_SIZE1 * IMG_SIZE2 # final layer
 
 # DISCRIMINATOR
@@ -48,7 +48,7 @@ HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
 KERNEL_SIZE_1 = [10,10]
 KERNEL_SIZE_2 = [5,5]
 
-BATCH_SIZE = 100
+BATCH_SIZE = 5
 MAX_STEPS = 1000
 LOG_FREQUENCY = 100
 
@@ -191,7 +191,7 @@ with tf.device(DEVICE):
             return  tf.get_variable(name="{}_bias".format(name), initializer=initial)
             #return tf.Variable(initial)
 
-        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, pool_size=5, act=tf.nn.sigmoid):
+        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, pool_size=3, act=tf.nn.sigmoid):
             with tf.variable_scope(layer_name) as scope:
                 kernel = init_weight(shape=kernel_shape+[channel_dim, output_dim],name=layer_name, sd=5e-2)
                 #variable_summaries(kernel)
@@ -211,8 +211,8 @@ with tf.device(DEVICE):
         # DEFINE GENERATOR
         def generator(gen_input):
             gen1 = tf.layers.dense(inputs=gen_input, units=GEN_SIZE_1, activation=tf.nn.sigmoid)
-            gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
-            gen3 = tf.layers.dense(inputs=gen2,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.identity)
+            #gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
+            gen3 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.identity)
             image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
@@ -221,8 +221,8 @@ with tf.device(DEVICE):
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
             hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, NUM_CHANNELS, HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
-            hidden_out = convLayer(hidden1, KERNEL_SIZE_1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
-            #hidden_out = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
+            hidden2 = convLayer(hidden1, KERNEL_SIZE_1, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
+            hidden_out = convLayer(hidden2, KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
             # Dense Layer
             flat = tf.reshape(hidden_out, [-1, hidden_out.get_shape().as_list()[1] * hidden_out.get_shape().as_list()[2] * HIDDEN_SIZE_2])
             with tf.variable_scope("dense") as scope:
@@ -306,7 +306,6 @@ with tf.device(DEVICE):
 
         # Training cycle
         for epoch in range(MAX_STEPS):
-            avg_cost = 0.
 
             # Loop over all batches
             for i in range(total_batch):
@@ -315,29 +314,22 @@ with tf.device(DEVICE):
                 G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
                 # Run optimization op (backprop) and cost op (to get loss value)
                 summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
-                train_writer.add_summary(summary, i)
-                print('Adding run metadata for', i)
+                train_writer.add_summary(summary, epoch)
+                print('Adding run data for', epoch)
 
-                # Keep track of meta data
-                # if i % 1 == 0:
-                #     #   I'm not a billion percent sure what this does....
-                #     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                #     run_metadata = tf.RunMetadata()
-                #     summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
-                #                           feed_dict={g: G_INPUT},
-                #                           options=run_options,
-                #                           run_metadata=run_metadata)
-                #     train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
-                #     train_writer.add_summary(summary, i)
-                #     print('Adding run metadata for', i)
 
             # Display logs per epoch step
             if epoch % LOG_FREQUENCY == 0:
-                #G_TEST = np.random.uniform(-1., 1., size=[len(TEST_DATASET),GEN_SIZE_IN])
-                #G_TEST = np.array(np.random.randint(NUM_CLASSES,size=len(mnist.test.images)),dtype="int32")
-                #summary, _g = sess.run([merged, fake_data], feed_dict={x: TEST_DATASET, g: G_TEST})
-                #summary,_g = sess.run([merged, fake_data], feed_dict={x: mnist.test.images, g: G_TEST})
-                #test_writer.add_summary(summary, i)
+                #   I'm not a billion percent sure what this does....
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
+                                      feed_dict={g: G_INPUT},
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, "step_{}_{}".format(epoch,i))
+                train_writer.add_summary(summary, epoch)
+                print('Adding run metadata for', epoch)
                 save_path = saver.save(sess, SAVE_PATH, global_step = epoch)
                 print('Step %s' % epoch)
         # Cleanup
