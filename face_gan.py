@@ -10,7 +10,7 @@ import time
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
-MODEL_PATH = os.path.join(DIR_PATH,"saved","conv","model_steps.ckpt")
+CHKPT_PATH = os.path.join(DIR_PATH,"saved","conv")
 LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
 DATA_PATH = os.path.join(DIR_PATH,"data","celeb")
 
@@ -211,9 +211,10 @@ with tf.device(DEVICE):
         # DEFINE GENERATOR
         def generator(gen_input):
             gen1 = tf.layers.dense(inputs=gen_input, units=GEN_SIZE_1, activation=tf.nn.sigmoid)
-            #gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
-            gen3 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.identity)
-            image_shaped_gen = tf.reshape(gen3,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            gen2 = tf.layers.dense(inputs=gen1,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
+            gen3 = tf.layers.dense(inputs=gen2,      units=GEN_SIZE_2, activation=tf.nn.sigmoid)
+            gen4 = tf.layers.dense(inputs=gen3,      units=GEN_SIZE_3 * NUM_CHANNELS, activation=tf.identity)
+            image_shaped_gen = tf.reshape(gen4,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
             return image_shaped_gen
@@ -291,7 +292,7 @@ with tf.device(DEVICE):
         sess.run(init)
 
         try:
-            ckpt = tf.train.get_checkpoint_state(SAVE_PATH)
+            ckpt = tf.train.get_checkpoint_state(CHKPT_PATH)
             saver.restore(sess, ckpt.model_checkpoint_path)
             print("Model restored from file: %s" % SAVE_PATH)
         except Exception as e:
