@@ -42,7 +42,8 @@ GEN_SIZE_IN = 100
 GEN_KERNEL = [20,17]
 GEN_SIZE_1 = 50 # 1st layer number of features
 GEN_SIZE_2 = 25 # 2nd layer number of features
-GEN_SIZE_3 = 3 # final layer
+GEN_SIZE_3 = 10
+GEN_SIZE_4 = 3# final layer
 
 # DISCRIMINATOR
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
@@ -52,7 +53,7 @@ HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
 KERNEL_SIZE_1 = [10,10]
 KERNEL_SIZE_2 = [5,5]
 
-BATCH_SIZE = 10
+BATCH_SIZE = 25
 MAX_STEPS = 10000
 LOG_FREQUENCY = 100
 
@@ -181,13 +182,15 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_input):
-            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_1,strides=(1,1),activation=tf.identity)
+            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
             bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1))
             deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
             bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2))
             deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
             bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3))
-            flat = tf.contrib.layers.flatten(bnorm3)
+            deconv4 = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm4 = tf.nn.relu(deconv4)
+            flat = tf.contrib.layers.flatten(bnorm4)
             dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
             image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
@@ -196,15 +199,16 @@ with tf.device(DEVICE):
 
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
-            hidden1 = convLayer(input_tensor, KERNEL_SIZE_1, NUM_CHANNELS,  HIDDEN_SIZE_1, 'layer1' , act=tf.nn.relu)
-            hidden2 = convLayer(hidden1,      KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2' , act=tf.nn.relu)
-            hidden_out = convLayer(hidden2,   KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3')
+            hidden1 = convLayer(input_tensor, KERNEL_SIZE_2, NUM_CHANNELS,  HIDDEN_SIZE_1, 'layer1', act=tf.nn.relu)
+            hidden2 = convLayer(hidden1,      KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2', act=tf.nn.relu)
+            hidden3 = convLayer(hidden2,      KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
+            hidden_out = convLayer(hidden3,   KERNEL_SIZE_2, HIDDEN_SIZE_3, HIDDEN_SIZE_4, 'layer4', act=tf.nn.relu)
             # Dense Layer
             with tf.variable_scope("dense") as scope:
                 flat = tf.contrib.layers.flatten(hidden_out)
-                dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
+                #dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
                 # Logits Layer
-                dropout = tf.layers.dropout(inputs=dense, rate=0.2)
+                dropout = tf.layers.dropout(inputs=flat, rate=0.2)
                 logits = tf.layers.dense(inputs=dropout, units=1)
             prob = tf.nn.sigmoid(logits)
             return prob
