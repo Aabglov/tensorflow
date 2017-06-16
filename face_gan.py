@@ -202,7 +202,7 @@ with tf.device(DEVICE):
             hidden1 = convLayer(input_tensor, KERNEL_SIZE_2, NUM_CHANNELS,  HIDDEN_SIZE_1, 'layer1', act=tf.nn.relu)
             hidden2 = convLayer(hidden1,      KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2', act=tf.nn.relu)
             hidden3 = convLayer(hidden2,      KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
-            hidden_out = convLayer(hidden3,   KERNEL_SIZE_2, HIDDEN_SIZE_3, HIDDEN_SIZE_4, 'layer4', act=tf.nn.relu)
+            hidden_out = convLayer(hidden3,   KERNEL_SIZE_2, HIDDEN_SIZE_3, HIDDEN_SIZE_4, 'layer4', pool_size=1, act=tf.nn.relu)
             # Dense Layer
             with tf.variable_scope("dense") as scope:
                 flat = tf.contrib.layers.flatten(hidden_out)
