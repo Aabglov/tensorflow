@@ -52,7 +52,7 @@ HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
 KERNEL_SIZE_1 = [10,10]
 KERNEL_SIZE_2 = [5,5]
 
-BATCH_SIZE = 100
+BATCH_SIZE = 10
 MAX_STEPS = 10000
 LOG_FREQUENCY = 100
 
@@ -181,10 +181,13 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_input):
-            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_1,strides=(1,1),activation=tf.nn.relu)
-            deconv2 = tf.layers.conv2d_transpose(inputs=deconv1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.nn.relu)
-            deconv3 = tf.layers.conv2d_transpose(inputs=deconv1,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.nn.sigmoid)
-            flat = tf.contrib.layers.flatten(deconv3)
+            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_1,strides=(1,1),activation=tf.identity)
+            bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1))
+            deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2))
+            deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3))
+            flat = tf.contrib.layers.flatten(bnorm3)
             dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
             image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
