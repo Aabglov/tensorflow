@@ -171,26 +171,32 @@ with tf.device(DEVICE):
             tf.summary.image('input', image_shaped_input, NUM_CLASSES)
             #shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
 
-        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, dr=0.2, pool_size=3, act=tf.nn.sigmoid):
+        def convLayer(input_tensor, kernel_shape, channel_dim, output_dim, layer_name, dr=0.2, pool_size=3, act=None):
             with tf.variable_scope(layer_name) as scope:
                 # 2D Convolution
                 conv = tf.layers.conv2d(input_tensor,channel_dim,kernel_shape,strides=(1,1),padding='same',activation=act)
                 # Pooling
                 pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
+                #out = act(tf.layers.batch_normalization(pool,training=True))
                 dropout = tf.layers.dropout(inputs=pool, rate=dr)
                 return dropout
 
+        def deConvLayer(input_tensor, num_channels, kernel_size, strides, layer_name, act=None):
+            with tf.variable_scope(layer_name) as scope:
+                # Inverse 2D convolution
+                deconv = tf.layers.conv2d_transpose(inputs=input_tensor,filters=num_channels,kernel_size=kernel_size,strides=strides,activation=None)
+                # Batch Normalization - helps the learnin'
+                bnorm = act(tf.layers.batch_normalization(deconv,training=True))
+                return bnorm
+
+
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_input):
-            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
-            bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1))
-            deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2))
-            deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3))
-            deconv4 = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            bnorm4 = tf.nn.relu(deconv4)
-            flat = tf.contrib.layers.flatten(bnorm4)
+            deconv1 =    deConvLayer(gen_input, num_channels=GEN_SIZE_1, kernel_size=KERNEL_SIZE_2, strides=(1,1), layer_name="deconv_1", act=tf.nn.relu)
+            deconv2 =    deConvLayer(gen_input, num_channels=GEN_SIZE_2, kernel_size=KERNEL_SIZE_2, strides=(2,2), layer_name="deconv_2", act=tf.nn.relu)
+            deconv3 =    deConvLayer(gen_input, num_channels=GEN_SIZE_3, kernel_size=KERNEL_SIZE_2, strides=(2,2), layer_name="deconv_3", act=tf.nn.relu)
+            deconv_out = deConvLayer(gen_input, num_channels=GEN_SIZE_4, kernel_size=KERNEL_SIZE_2, strides=(2,2), layer_name="deconv_4", act=tf.nn.relu)
+            flat = tf.contrib.layers.flatten(deconv_out)
             dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
             image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
@@ -201,8 +207,8 @@ with tf.device(DEVICE):
         def discriminatorConv(input_tensor):
             hidden1 = convLayer(input_tensor, KERNEL_SIZE_2, NUM_CHANNELS,  HIDDEN_SIZE_1, 'layer1', act=tf.nn.relu)
             hidden2 = convLayer(hidden1,      KERNEL_SIZE_2, HIDDEN_SIZE_1, HIDDEN_SIZE_2, 'layer2', act=tf.nn.relu)
-            #hidden3 = convLayer(hidden2,      KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
-            hidden_out = convLayer(hidden2,   KERNEL_SIZE_2, HIDDEN_SIZE_3, HIDDEN_SIZE_4, 'layer_out', act=tf.nn.relu)
+            hidden3 = convLayer(hidden2,      KERNEL_SIZE_2, HIDDEN_SIZE_2, HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
+            hidden_out = convLayer(hidden3,   KERNEL_SIZE_2, HIDDEN_SIZE_3, HIDDEN_SIZE_4, 'layer_out', pool_size=1, act=None)
             # Dense Layer
             with tf.variable_scope("dense") as scope:
                 flat = tf.contrib.layers.flatten(hidden_out)
@@ -212,6 +218,7 @@ with tf.device(DEVICE):
                 logits = tf.layers.dense(inputs=dropout, units=1)
             prob = tf.nn.sigmoid(logits)
             return prob
+
 
 
         with tf.variable_scope("generator") as scope:
@@ -274,8 +281,7 @@ with tf.device(DEVICE):
         # Training cycle
         for epoch in range(1,MAX_STEPS):
 
-
-            G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
+            G_INPUT = np.random.uniform(-1, 1., size=[BATCH_SIZE,GEN_SIZE_IN])
             # Run optimization op (backprop) and cost op (to get loss value)
             summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
             train_writer.add_summary(summary, epoch)
