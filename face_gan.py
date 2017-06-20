@@ -38,7 +38,7 @@ IMG_SIZE1 = 54
 IMG_SIZE2 = 44
 
 # GENERATOR
-GEN_SIZE_IN = 1000
+GEN_SIZE_IN = 10000
 GEN_KERNEL = [20,17]
 GEN_SIZE_1 = 50 # 1st layer number of features
 GEN_SIZE_2 = 25 # 2nd layer number of features
@@ -207,13 +207,14 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_input):
-            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
+            resized_input = tf.reshape(gen_input,[-1,10,10,100])
+            deconv1 = tf.layers.conv2d_transpose(inputs=resized_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
             bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1,momentum=0.9,training=True))
             deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
             bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2,momentum=0.9,training=True))
-            #deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            #bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3,momentum=0.9,training=True))
-            deconv4 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3,momentum=0.9,training=True))
+            deconv4 = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
             bnorm4 = tf.nn.relu(deconv4)
             flat = tf.contrib.layers.flatten(bnorm4)
             dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
