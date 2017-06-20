@@ -180,47 +180,47 @@ with tf.device(DEVICE):
                 dropout = tf.layers.dropout(inputs=pool, rate=dr)
                 return dropout
 
-        # DEFINE GENERATOR USING DECONVOLUTION
-        def generatorDeconv(gen_input):
-            dense1 = tf.layers.dense(inputs=gen_input,units=GEN_SIZE_IN * GEN_KERNEL[0] * GEN_KERNEL[1], activation=None)
-            bnorm1 = tf.nn.relu(tf.layers.batch_normalization(dense1,momentum=0.9,training=False))
-            reshape = tf.reshape(bnorm1,[-1,GEN_KERNEL[0],GEN_KERNEL[1],GEN_SIZE_IN])
-            dropout = tf.layers.dropout(inputs=reshape, rate=0.2)
-
-            deconv1 = tf.layers.conv2d_transpose(inputs=dropout,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
-            bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv1,momentum=0.9,training=False))
-
-            deconv2 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv2,momentum=0.9,training=False))
-
-            #deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            #bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3,momentum=0.9,training=True))
-
-            deconv_out = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-            act_out = tf.nn.sigmoid(deconv_out)
-            flat = tf.contrib.layers.flatten(act_out)
-            dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
-            image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
-            #return gen2
-            return image_shaped_gen
-
         # # DEFINE GENERATOR USING DECONVOLUTION
         # def generatorDeconv(gen_input):
-        #     deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
-        #     bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1))
-        #     deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-        #     bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2))
-        #     deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-        #     bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3))
-        #     deconv4 = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
-        #     bnorm4 = tf.nn.relu(deconv4)
-        #     flat = tf.contrib.layers.flatten(bnorm4)
+        #     dense1 = tf.layers.dense(inputs=gen_input,units=GEN_SIZE_IN * GEN_KERNEL[0] * GEN_KERNEL[1], activation=None)
+        #     bnorm1 = tf.nn.relu(tf.layers.batch_normalization(dense1,momentum=0.9,training=False))
+        #     reshape = tf.reshape(bnorm1,[-1,GEN_KERNEL[0],GEN_KERNEL[1],GEN_SIZE_IN])
+        #     dropout = tf.layers.dropout(inputs=reshape, rate=0.2)
+        #
+        #     deconv1 = tf.layers.conv2d_transpose(inputs=dropout,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
+        #     bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv1,momentum=0.9,training=False))
+        #
+        #     deconv2 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+        #     bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv2,momentum=0.9,training=False))
+        #
+        #     #deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+        #     #bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3,momentum=0.9,training=True))
+        #
+        #     deconv_out = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+        #     act_out = tf.nn.sigmoid(deconv_out)
+        #     flat = tf.contrib.layers.flatten(act_out)
         #     dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
         #     image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
         #     tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
         #     #return gen2
         #     return image_shaped_gen
+
+        # DEFINE GENERATOR USING DECONVOLUTION
+        def generatorDeconv(gen_input):
+            deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=GEN_SIZE_1,kernel_size=KERNEL_SIZE_2,strides=(1,1),activation=tf.identity)
+            bnorm1 = tf.nn.relu(tf.layers.batch_normalization(deconv1,momentum=0.9,training=True))
+            deconv2 = tf.layers.conv2d_transpose(inputs=bnorm1,  filters=GEN_SIZE_2,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm2 = tf.nn.relu(tf.layers.batch_normalization(deconv2,momentum=0.9,training=True))
+            deconv3 = tf.layers.conv2d_transpose(inputs=bnorm2,  filters=GEN_SIZE_3,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm3 = tf.nn.relu(tf.layers.batch_normalization(deconv3,momentum=0.9,training=True))
+            deconv4 = tf.layers.conv2d_transpose(inputs=bnorm3,  filters=GEN_SIZE_4,kernel_size=KERNEL_SIZE_2,strides=(2,2),activation=tf.identity)
+            bnorm4 = tf.nn.relu(deconv4)
+            flat = tf.contrib.layers.flatten(bnorm4)
+            dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
+            image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
+            #return gen2
+            return image_shaped_gen
 
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
