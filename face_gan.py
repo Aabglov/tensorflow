@@ -234,8 +234,8 @@ with tf.device(DEVICE):
         def discriminatorConv(input_tensor):
             hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1', act=tf.nn.relu)
             hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, 'layer2', act=tf.nn.relu)
-            #hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
-            hidden_out = convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out', pool_size=3, act=tf.nn.sigmoid)
+            hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'layer3', act=tf.nn.relu)
+            hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out', pool_size=1, act=tf.nn.sigmoid)
             # Dense Layer
             with tf.variable_scope("dense") as scope:
                 flat = tf.contrib.layers.flatten(hidden_out)
