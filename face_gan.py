@@ -217,9 +217,9 @@ with tf.device(DEVICE):
             deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv2")
             deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv3")
             #deconv4 = deconvLayer(input_tensor=deconv3,channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=(2,2),conv_kernel=CONV_KERNEL,conv_strides=(2,2),layer_name="deconv4")
-            deconv_out = deconvLayer(input_tensor=deconv3,channels=NUM_CHANNELS,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv_out")#,act=tf.nn.tanh)
+            deconv_out = deconvLayer(input_tensor=deconv3,channels=NUM_CHANNELS,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv_out",act=tf.nn.tanh)
             flat = tf.contrib.layers.flatten(deconv_out)
-            dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.tanh)
+            dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
             image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
