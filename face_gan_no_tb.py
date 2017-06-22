@@ -180,7 +180,7 @@ with tf.device(DEVICE):
 
         with tf.name_scope('input_reshape'):
             image_shaped_input = tf.reshape(x,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            tf.summary.image('input', image_shaped_input, NUM_CLASSES)
+            #tf.summary.image('input', image_shaped_input, NUM_CLASSES)
             #shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
 
         # Ripped straight from TensorLayers definition
@@ -221,7 +221,7 @@ with tf.device(DEVICE):
             flat = tf.contrib.layers.flatten(deconv_out)
             dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.tanh)
             image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
+            #tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
             return image_shaped_gen
 
@@ -257,8 +257,8 @@ with tf.device(DEVICE):
         with tf.name_scope('loss'):
             discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
             generator_loss = -tf.reduce_mean(tf.log(fake_prob))
-            tf.summary.scalar('discriminator_loss', discriminator_loss)
-            tf.summary.scalar('generator_loss', generator_loss)
+            #tf.summary.scalar('discriminator_loss', discriminator_loss)
+            #tf.summary.scalar('generator_loss', generator_loss)
 
         # Define optimizer
         with tf.name_scope('train'):
@@ -270,8 +270,8 @@ with tf.device(DEVICE):
             train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
 
         # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
-        merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
+        #merged = tf.summary.merge_all()
+        #train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
         #test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'test'))
 
         # Initializing the variables
@@ -307,31 +307,17 @@ with tf.device(DEVICE):
 
             G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_TOTAL_IN])
             # Run optimization op (backprop) and cost op (to get loss value)
-            summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
-            train_writer.add_summary(summary, epoch)
+            img, g_unused, _d,_g = sess.run([image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
+            #train_writer.add_summary(summary, epoch)
             print('Adding run data for', epoch)
 
 
-            # Display logs per epoch step
-            if epoch % LOG_FREQUENCY == 0:
-                #   I'm not a billion percent sure what this does....
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                run_metadata = tf.RunMetadata()
-                summary, img, _d,_g = sess.run([merged, image, train_d_step, train_g_step],
-                                      feed_dict={g: G_INPUT},
-                                      options=run_options,
-                                      run_metadata=run_metadata)
-                train_writer.add_run_metadata(run_metadata, "step_{}".format(epoch))
-                train_writer.add_summary(summary, epoch)
-                print('Adding run metadata for', epoch)
-                save_path = saver.save(sess, SAVE_PATH, global_step = epoch)
-                print('Step %s' % epoch)
         # Cleanup
         #   Finish off the filename queue coordinator.
         coord.request_stop()
         coord.join(threads)
         #   Close writers
-        train_writer.close()
+        #train_writer.close()
         #test_writer.close()
         print("Training Finished!")
 
