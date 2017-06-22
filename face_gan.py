@@ -32,7 +32,7 @@ ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
 IMG_SIZE1 = 64
-IMG_SIZE2 = 48
+IMG_SIZE2 = 52
 
 # GENERATOR
 #GEN_SIZE_IN = 10000
