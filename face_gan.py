@@ -32,19 +32,19 @@ ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
 IMG_SIZE1 = 64
-IMG_SIZE2 = 52
+IMG_SIZE2 = 48
 
 # GENERATOR
-#GEN_SIZE_IN = 10000
-GEN_SIZE_IN1 = 4#20
-GEN_SIZE_IN2 = 3#17
+GEN_SIZE_IN = 100
+GEN_IN_X = 4#20
+GEN_IN_Y = 3#17
 GEN_CHANNELS = 1024
-GEN_TOTAL_IN = GEN_SIZE_IN1 * GEN_SIZE_IN2 * GEN_CHANNELS
+GEN_TOTAL_IN = GEN_IN_X * GEN_IN_Y * GEN_CHANNELS
 GEN_SIZE_1 = 512 # 1st layer number of features
 GEN_SIZE_2 = 256 # 2nd layer number of features
 GEN_SIZE_3 = 128 # 3rd layer
 GEN_SIZE_4 = 64# final layer
-GEN_KERNEL = [2,2]
+GEN_KERNEL = [5,5]
 DECONV_STRIDES = (2,2)
 CONV_KERNEL = [2,2]
 
@@ -55,77 +55,10 @@ HIDDEN_SIZE_3 = 128 # 3rd layer
 HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
 DISC_KERNEL = [5,5]
 
-BATCH_SIZE = 25
-MAX_STEPS = 10000
+BATCH_SIZE = 50
+MAX_STEPS = 40000
 LOG_FREQUENCY = 100
 
-
-################################# SIZE TESTING ####################################################
-# def init_weight(shape,name,sd=None):
-#            """Create a weight variable with appropriate initialization."""
-#            if not sd:
-#                sd = 1. / tf.sqrt(shape[0] / 2.)
-#            initial = tf.truncated_normal(shape, stddev=sd)
-#            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
-#
-# input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
-# kernel = init_weight([10,10,3,16],"kernel")
-# conv = tf.nn.conv2d(input_tensor, kernel, [1, 1, 1, 1], padding='SAME')
-# pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[3,3], strides=3)
-#
-# kernel2 = init_weight([5,5,16,64],"kernel2")
-# conv2 = tf.nn.conv2d(pool, kernel2, [1, 1, 1, 1], padding='SAME')
-# pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3,3], strides=3)
-#
-# kernel3 = init_weight([5,5,64,128],"kernel3")
-# conv3 = tf.nn.conv2d(pool2, kernel3, [1, 1, 1, 1], padding='SAME')
-# pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=3)
-#
-# gen_input = init_weight([1,4,3,128],"genput")
-# deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=256,kernel_size=[2,2],strides=(2,2),activation=tf.nn.relu)
-# #conv1 =   tf.layers.conv2d(deconv1,256,[3,3],strides=(2,2),padding='valid',activation=None)
-# deconv2 = tf.layers.conv2d_transpose(inputs=deconv1,  filters=256,kernel_size=[2,2],strides=(2,2),activation=tf.nn.relu)
-# #conv2 =   tf.layers.conv2d(deconv2,256,[3,3],strides=(2,2),padding='valid',activation=None)
-# deconv3 = tf.layers.conv2d_transpose(inputs=deconv2,  filters=128,kernel_size=[2,2],strides=(2,2),activation=tf.nn.relu)
-# #conv3 =   tf.layers.conv2d(deconv3,128,[3,3],strides=(2,2),padding='valid',activation=None)
-# deconv4 = tf.layers.conv2d_transpose(inputs=deconv3,  filters=3,  kernel_size=[2,2],strides=(2,2),activation=tf.nn.relu)
-# #conv4 =   tf.layers.conv2d(deconv4,3,[2,2],strides=(2,2),padding='valid',activation=None)
-# flat = tf.contrib.layers.flatten(conv4)
-# dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
-# final = tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-# HODOR
-
-# Make a queue of file names including all the JPEG images files in the relative
-# image directory.
-#filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(DATA_PATH,"*.jpg")))
-
-# Read an entire image file which is required since they're JPEGs, if the images
-# are too large they could be split in advance to smaller files or use the Fixed
-# reader to split up the file.
-#image_reader = tf.WholeFileReader()
-
-# Read a whole file from the queue
-#filename, image_file = image_reader.read(filename_queue)
-
-# Decode the image as a JPEG file, this will turn it into a Tensor which we can
-# then use in training.
-#image = tf.image.decode_jpeg(image_file)
-
-# with tf.Session() as sess:
-#     # Required to get the filename matching to run.
-#     tf.global_variables_initializer().run()
-#
-#     # Coordinate the loading of image files.
-#     coord = tf.train.Coordinator()
-#     threads = tf.train.start_queue_runners(coord=coord)
-#
-#     # Get an image tensor and print its value.
-#     for _ in range(10):
-#         key,image_tensor = sess.run([filename,image])
-#         print(k)
-#         #print(image_tensor)
-#
-# HODOR
 
 if tf.gfile.Exists(LOG_DIR):
     tf.gfile.DeleteRecursively(LOG_DIR)
@@ -173,10 +106,8 @@ with tf.device(DEVICE):
         with tf.name_scope('input'):
             #x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
             x = tf.image.resize_images(images,[IMG_SIZE1,IMG_SIZE2])#images
-            #g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
-            #g_shaped = tf.reshape(g,[-1,1,1,GEN_SIZE_IN])
-            g = tf.placeholder(tf.float32, [None, GEN_TOTAL_IN] , name="generator_input") # Random input vector
-            g_shaped = tf.reshape(g,[-1,GEN_SIZE_IN1,GEN_SIZE_IN2,GEN_CHANNELS])
+            g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
+            g_shaped = tf.reshape(g,[-1,1,1,GEN_SIZE_IN])
 
         with tf.name_scope('input_reshape'):
             image_shaped_input = tf.reshape(x,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
@@ -194,33 +125,34 @@ with tf.device(DEVICE):
         def convLayer(input_tensor, kernel_shape, channel_dim, layer_name, dr=0.2, pool_size=3, act=leaky_relu):
             with tf.variable_scope(layer_name) as scope:
                 # 2D Convolution
-                conv = tf.layers.conv2d(input_tensor,channel_dim,kernel_shape,strides=(1,1),padding='same',activation=None)
+                conv = tf.layers.conv2d(input_tensor,channel_dim,kernel_shape,strides=(2,2),padding='same',activation=None)
                 # Pooling
                 #pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
                 # Psuedo down-sampling
-                down = tf.layers.conv2d(conv, channel_dim, [pool_size,pool_size], (pool_size,pool_size), padding='valid', activation=None)
-                #act_out = act(pool)
+                #down = tf.layers.conv2d(conv, channel_dim, [pool_size,pool_size], (pool_size,pool_size), padding='valid', activation=None)
                 #norm = tf.layers.dropout(inputs=act_out, rate=dr)
-                norm = act(tf.layers.batch_normalization(down,momentum=0.9,training=True),name=layer_name, alpha=0.1)
+                norm = act(tf.layers.batch_normalization(conv,momentum=0.9,epsilon=1e-5,training=True),name=layer_name, alpha=0.1)
                 return norm
 
-        def deconvLayer(input_tensor,channels,deconv_kernel,deconv_strides,conv_kernel,conv_strides,layer_name,act=tf.nn.relu):
+        def deconvLayer(input_tensor, channels, deconv_kernel, deconv_strides, layer_name, conv_kernel=[3,3], conv_strides=(1,1), act=tf.nn.relu):
             with tf.variable_scope(layer_name) as scope:
-                conv =   tf.layers.conv2d(inputs=input_tensor,filters=channels,kernel_size=conv_kernel,strides=conv_strides,padding='same',activation=None)
-                deconv = tf.layers.conv2d_transpose(inputs=conv,filters=channels,kernel_size=deconv_kernel,strides=deconv_strides,activation=None)
-                norm = act(tf.layers.batch_normalization(deconv,momentum=0.9,training=True))
+                #conv =   tf.layers.conv2d(inputs=input_tensor,filters=channels,kernel_size=conv_kernel,strides=conv_strides,padding='same',activation=None)
+                deconv = tf.layers.conv2d_transpose(inputs=input_tensor,filters=channels,kernel_size=deconv_kernel,strides=deconv_strides,padding='same',activation=None)
+                norm = act(tf.layers.batch_normalization(deconv,momentum=0.9,epsilon=1e-5,training=True))
                 return norm
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_in):
-            deconv1 = deconvLayer(input_tensor=gen_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv1")
-            deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv2")
-            deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv3")
+            linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
+            shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
+            deconv1 = deconvLayer(input_tensor=shaped_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv1")
+            deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
+            deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv3")
             #deconv4 = deconvLayer(input_tensor=deconv3,channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=(2,2),conv_kernel=CONV_KERNEL,conv_strides=(2,2),layer_name="deconv4")
-            deconv_out = deconvLayer(input_tensor=deconv3,channels=NUM_CHANNELS,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,conv_kernel=CONV_KERNEL,conv_strides=(1,1),layer_name="deconv_out",act=tf.nn.tanh)
-            flat = tf.contrib.layers.flatten(deconv_out)
-            dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
-            image_shaped_gen= tf.reshape(dense,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            deconv_out = tf.layers.conv2d_transpose(inputs=deconv3,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
+            #flat = tf.contrib.layers.flatten(deconv_out)
+            #dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
+            image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
             #return gen2
             return image_shaped_gen
@@ -230,7 +162,7 @@ with tf.device(DEVICE):
             hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1')
             hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, 'layer2')
             hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'layer3')
-            hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out', pool_size=1)
+            hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out')
             # Dense Layer
             with tf.variable_scope("dense") as scope:
                 flat = tf.contrib.layers.flatten(hidden_out)
@@ -239,7 +171,7 @@ with tf.device(DEVICE):
                 #dropout = tf.layers.dropout(inputs=dense, rate=0.2)
                 logits = tf.layers.dense(inputs=flat, units=1)
             prob = tf.nn.sigmoid(logits)
-            return prob
+            return prob, logits
 
 
         with tf.variable_scope("generator") as scope:
@@ -247,16 +179,21 @@ with tf.device(DEVICE):
             #fake_data = generator(g)
 
         with tf.variable_scope("discriminator") as scope:
-            fake_prob = discriminatorConv(fake_data)
+            fake_prob,fake_logits = discriminatorConv(fake_data)
             #fake_prob = discriminator(fake_data)
             scope.reuse_variables()
-            real_prob = discriminatorConv(image_shaped_input)
+            real_prob,real_logits = discriminatorConv(image_shaped_input)
             #real_prob = discriminator(x)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
-            discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
-            generator_loss = -tf.reduce_mean(tf.log(fake_prob))
+
+            discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
+            discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
+            discriminator_loss = discriminator_loss_real + discriminator_loss_fake
+            generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
+            #discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
+            #generator_loss = -tf.reduce_mean(tf.log(fake_prob))
             tf.summary.scalar('discriminator_loss', discriminator_loss)
             tf.summary.scalar('generator_loss', generator_loss)
 
@@ -305,7 +242,7 @@ with tf.device(DEVICE):
         for epoch in range(1,MAX_STEPS):
 
 
-            G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_TOTAL_IN])
+            G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
             # Run optimization op (backprop) and cost op (to get loss value)
             summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
             train_writer.add_summary(summary, epoch)
