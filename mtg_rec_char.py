@@ -9,6 +9,7 @@ import word_helpers
 import pickle
 import time
 
+
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
