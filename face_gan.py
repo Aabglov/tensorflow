@@ -105,7 +105,8 @@ with tf.device(DEVICE):
         # Input placeholders
         with tf.name_scope('input'):
             #x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
-            x = tf.image.resize_images(images,[IMG_SIZE1,IMG_SIZE2])#images
+            img_scaled = (images/127.5) - 1.0
+            x = tf.image.resize_images(img_scaled,[IMG_SIZE1,IMG_SIZE2])#images
             g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
             g_shaped = tf.reshape(g,[-1,1,1,GEN_SIZE_IN])
 
@@ -159,7 +160,10 @@ with tf.device(DEVICE):
 
         # DEFINE DISCRIMINATOR
         def discriminatorConv(input_tensor):
-            hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1')
+            #hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1')
+            # Don't apply batch normalization to input layer
+            with tf.variable_scope("layer1") as scope:
+                hidden1 = tf.layers.conv2d(input_tensor,HIDDEN_SIZE_1,DISC_KERNEL,strides=(2,2),padding='same',activation=tf.nn.relu)
             hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, 'layer2')
             hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'layer3')
             hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out')
