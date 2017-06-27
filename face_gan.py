@@ -31,13 +31,13 @@ ORIG_IMG_SIZE1 = 218
 ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
-IMG_SIZE1 = 64
-IMG_SIZE2 = 48
+IMG_SIZE1 = 16 * 13#64
+IMG_SIZE2 = 16 * 11#48
 
 # GENERATOR
 GEN_SIZE_IN = 100
-GEN_IN_X = 4#20
-GEN_IN_Y = 3#17
+GEN_IN_X = 13
+GEN_IN_Y = 11
 GEN_CHANNELS = 1024
 GEN_TOTAL_IN = GEN_IN_X * GEN_IN_Y * GEN_CHANNELS
 GEN_SIZE_1 = 512 # 1st layer number of features
