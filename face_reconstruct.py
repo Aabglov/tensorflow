@@ -12,7 +12,7 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
 CHKPT_PATH = os.path.join(DIR_PATH,"saved","conv")
 LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
-DATA_PATH = os.path.join(DIR_PATH,"data","celeb","celeb")
+DATA_PATH = os.path.join(DIR_PATH,"data","celeb")
 
 
 # Set random seed
@@ -24,22 +24,21 @@ tf.set_random_seed(seed)
 NUM_CLASSES = 10 # The number of digits present in the dataset
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
 NUM_CHANNELS = 3
-DIS_LEARNING_RATE = 0.0002 #0.001
-GEN_LEARNING_RATE = 0.0002 #0.001
+GEN_LEARNING_RATE = 0.0002
 ADAM_BETA = 0.5
 ORIG_IMG_SIZE1 = 218
 ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
-IMG_SIZE1 = 64
-IMG_SIZE2 = 48
+IMG_SIZE1 = 192 #64
+IMG_SIZE2 = 160 #48
 
-# GENERATOR
-GEN_SIZE_IN = 100
-GEN_IN_X = 4#20
-GEN_IN_Y = 3#17
-GEN_CHANNELS = 1024
-GEN_TOTAL_IN = GEN_IN_X * GEN_IN_Y * GEN_CHANNELS
+BLACKOUT_SIZE1 = int(IMG_SIZE1 / 2)
+BLACKOUT_SIZE2 = int(IMG_SIZE2 / 2)
+BLACKOUT_INDEX1 = int(IMG_SIZE1 / 4)
+BLACKOUT_INDEX2 = int(IMG_SIZE2 / 4)
+
+# SCALE UP
 GEN_SIZE_1 = 512 # 1st layer number of features
 GEN_SIZE_2 = 256 # 2nd layer number of features
 GEN_SIZE_3 = 128 # 3rd layer
@@ -48,18 +47,22 @@ GEN_KERNEL = [5,5]
 DECONV_STRIDES = (2,2)
 CONV_KERNEL = [2,2]
 
-# DISCRIMINATOR
+# SCALE DOWN
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
 HIDDEN_SIZE_2 = 64 # 2nd layer number of features
 HIDDEN_SIZE_3 = 128 # 3rd layer
-HIDDEN_SIZE_4 = 256 # Dense layer -- ouput
+HIDDEN_SIZE_4 = 256 # 4th layer
+HIDDEN_SIZE_5 = 512 # 5th layer
 DISC_KERNEL = [5,5]
 
 BATCH_SIZE = 50
 MAX_STEPS = 40000
 LOG_FREQUENCY = 100
+NUM_SUMMARY = 4
 
-
+if tf.gfile.Exists(LOG_DIR):
+    tf.gfile.DeleteRecursively(LOG_DIR)
+tf.gfile.MakeDirs(LOG_DIR)
 
 ######################################### UTILITY FUNCTIONS ########################################
 with tf.device(DEVICE):
@@ -99,16 +102,24 @@ with tf.device(DEVICE):
             capacity=MIN_QUEUE_EXAMPLES + NUM_CHANNELS * BATCH_SIZE,
             min_after_dequeue=MIN_QUEUE_EXAMPLES)
 
+        def blackout(x):
+            b = np.ones(x.get_shape())
+            #print(b.shape)
+            b[:,BLACKOUT_INDEX1:BLACKOUT_INDEX1+BLACKOUT_SIZE1,BLACKOUT_INDEX2:BLACKOUT_INDEX2+BLACKOUT_SIZE2,:] = 0.
+            return x * b
+
         # Input placeholders
         with tf.name_scope('input'):
             #x = tf.placeholder(tf.float32, [None, IMG_SIZE, IMG_SIZE], name='x-input')
-            x = tf.image.resize_images(images,[IMG_SIZE1,IMG_SIZE2])#images
-            g = tf.placeholder(tf.float32, [None, GEN_SIZE_IN] , name="generator_input") # Random input vector
-            g_shaped = tf.reshape(g,[-1,1,1,GEN_SIZE_IN])
+            img_scaled = (images/127.5) - 1.0
+            y = tf.image.resize_images(img_scaled,[IMG_SIZE1,IMG_SIZE2])#images
+            x = blackout(y)
 
         with tf.name_scope('input_reshape'):
-            image_shaped_input = tf.reshape(x,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            #tf.summary.image('input', image_shaped_input, NUM_CLASSES)
+            image_shaped_input = tf.reshape(y,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            tf.summary.image('TRUE', image_shaped_input, NUM_SUMMARY)
+            image_shaped_blackout = tf.reshape(x,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            tf.summary.image('BLACKOUT', image_shaped_blackout, NUM_SUMMARY)
             #shaped_labels = tf.reshape(tf.one_hot(y,NUM_CLASSES),[-1,NUM_CLASSES])
 
         # Ripped straight from TensorLayers definition
@@ -140,72 +151,43 @@ with tf.device(DEVICE):
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_in):
-            linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
-            shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
-            deconv1 = deconvLayer(input_tensor=shaped_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv1")
-            deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
-            deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv3")
-            #deconv4 = deconvLayer(input_tensor=deconv3,channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=(2,2),conv_kernel=CONV_KERNEL,conv_strides=(2,2),layer_name="deconv4")
-            deconv_out = tf.layers.conv2d_transpose(inputs=deconv3,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
-            #flat = tf.contrib.layers.flatten(deconv_out)
-            #dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
-            image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-            tf.summary.image('generated_input', image_shaped_gen, NUM_CLASSES)
-            #return gen2
-            return image_shaped_gen
+            # CONVOLVE INPUT TO SMALL KERNEL
+            hidden1 =    convLayer(gen_in,       DISC_KERNEL,  HIDDEN_SIZE_1, 'gen_conv1')
+            hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, 'gen_conv2')
+            hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'gen_conv3')
+            hidden4 =    convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'gen_conv4')
+            hidden_out = convLayer(hidden4,      DISC_KERNEL,  HIDDEN_SIZE_5, 'gen_conv_out')
 
-        # DEFINE DISCRIMINATOR
-        def discriminatorConv(input_tensor):
-            hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1')
-            hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, 'layer2')
-            hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'layer3')
-            hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'layer_out')
-            # Dense Layer
-            with tf.variable_scope("dense") as scope:
-                flat = tf.contrib.layers.flatten(hidden_out)
-                #dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
-                # Logits Layer
-                #dropout = tf.layers.dropout(inputs=dense, rate=0.2)
-                logits = tf.layers.dense(inputs=flat, units=1)
-            prob = tf.nn.sigmoid(logits)
-            return prob, logits
+            # DECONVOLVE THAT KERNEL INTO A BIG OL' PIC
+            deconv1 = deconvLayer(input_tensor=hidden_out, channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv1")
+            deconv2 = deconvLayer(input_tensor=deconv1,    channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
+            deconv3 = deconvLayer(input_tensor=deconv2,    channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv3")
+            deconv4 = deconvLayer(input_tensor=deconv3,    channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv4")
+            deconv_out = tf.layers.conv2d_transpose(inputs=deconv4,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
+            image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            tf.summary.image('generated_input', image_shaped_gen, NUM_SUMMARY)
+            return image_shaped_gen
 
 
         with tf.variable_scope("generator") as scope:
-            fake_data = generatorDeconv(g_shaped)
+            fake_data = generatorDeconv(x)
             #fake_data = generator(g)
 
         with tf.variable_scope("discriminator") as scope:
-            fake_prob,fake_logits = discriminatorConv(fake_data)
-            #fake_prob = discriminator(fake_data)
-            scope.reuse_variables()
-            real_prob,real_logits = discriminatorConv(image_shaped_input)
-            #real_prob = discriminator(x)
+            squared_diff = tf.squared_difference(image_shaped_input, fake_data)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
-
-            discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
-            discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
-            discriminator_loss = discriminator_loss_real + discriminator_loss_fake
-            generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
-            #discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
-            #generator_loss = -tf.reduce_mean(tf.log(fake_prob))
-            #tf.summary.scalar('discriminator_loss', discriminator_loss)
-            #tf.summary.scalar('generator_loss', generator_loss)
+            generator_loss = tf.reduce_mean(squared_diff)
+            tf.summary.scalar('loss', generator_loss)
 
         # Define optimizer
         with tf.name_scope('train'):
-            # Only update the variables associated with each network
-            #   If we update the discriminator while optimizing the generator it will lose the ability to discriminate
-            #   and our generator will no longer have an adversary.
-            #   The same is true of the generator.
-            train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
-            train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
+            train_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
 
         # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
-        #merged = tf.summary.merge_all()
-        #train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
         #test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'test'))
 
         # Initializing the variables
@@ -238,19 +220,32 @@ with tf.device(DEVICE):
         # Training cycle
         for epoch in range(1,MAX_STEPS):
 
-
-            G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
             # Run optimization op (backprop) and cost op (to get loss value)
-            img, g_unused, _d,_g = sess.run([image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
-            #train_writer.add_summary(summary, epoch)
+            summary,img, g_unused, _g = sess.run([merged, image, fake_data, train_step], feed_dict={})
+            train_writer.add_summary(summary, epoch)
             print('Adding run data for', epoch)
 
+
+            # Display logs per epoch step
+            if epoch % LOG_FREQUENCY == 0:
+                #   I'm not a billion percent sure what this does....
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                summary, img, _g = sess.run([merged, image, train_step],
+                                      feed_dict={},
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, "step_{}".format(epoch))
+                train_writer.add_summary(summary, epoch)
+                print('Adding run metadata for', epoch)
+                save_path = saver.save(sess, SAVE_PATH, global_step = epoch)
+                print('Step %s' % epoch)
         # Cleanup
         #   Finish off the filename queue coordinator.
         coord.request_stop()
         coord.join(threads)
         #   Close writers
-        #train_writer.close()
+        train_writer.close()
         #test_writer.close()
         print("Training Finished!")
 
