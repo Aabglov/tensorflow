@@ -163,8 +163,19 @@ with tf.device(DEVICE):
             deconv2 = deconvLayer(input_tensor=deconv1,    channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
             deconv3 = deconvLayer(input_tensor=deconv2,    channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv3")
             deconv4 = deconvLayer(input_tensor=deconv3,    channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv4")
-            deconv_out = tf.layers.conv2d_transpose(inputs=deconv4,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
-            image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+            deconv_out = deconvLayer(input_tensor=deconv4,    channels=NUM_CHANNELS,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv_out")
+
+            # Adding an additional pair of layers
+            # That will upscale the image beyond
+            # the size requirements then scale
+            # it back down, hopefully resulting
+            # in greater detail/sharpness
+            scale_up = deconvLayer(input_tensor=deconv_out, channels=NUM_CHANNELS,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv_downscale")
+            # Don't apply normalization (batch)
+            # to output layer
+            final = tf.layers.conv2d(scale_up, NUM_CHANNELS, DISC_KERNEL, strides=(2,2), padding='same', activation=tf.nn.tanh)
+            #final = tf.layers.conv2d_transpose(inputs=deconv4,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
+            image_shaped_gen= tf.reshape(final,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_SUMMARY)
             return image_shaped_gen
 
