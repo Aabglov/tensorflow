@@ -30,17 +30,17 @@ ORIG_IMG_SIZE1 = 218
 ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
-BIG_SIZE1 = 192 #64
-BIG_SIZE2 = 160 #48
+BIG_SIZE1 = int(192 / 2) #64
+BIG_SIZE2 = int(160 / 2) #48
 
 IMG_SIZE1 = int(BIG_SIZE1 / 2)
 IMG_SIZE2 = int(BIG_SIZE2 / 2)
 
 # SCALE UP
-GEN_SIZE_1 = 512 # 1st layer number of features
-GEN_SIZE_2 = 256 # 2nd layer number of features
-GEN_SIZE_3 = 128 # 3rd layer
-GEN_SIZE_4 = 64# final layer
+GEN_SIZE_1 = 128 #512 # 1st layer number of features
+GEN_SIZE_2 = 64 #256 # 2nd layer number of features
+GEN_SIZE_3 = 32 #128 # 3rd layer
+GEN_SIZE_4 = 16 #64# final layer
 GEN_KERNEL = [5,5]
 DECONV_STRIDES = (2,2)
 CONV_KERNEL = [2,2]
@@ -146,8 +146,8 @@ with tf.device(DEVICE):
             # CONVOLVE INPUT TO SMALL KERNEL
             deconv1 = deconvLayer(input_tensor=gen_in, channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv1")
             conv1   = convLayer(input_tensor=deconv1, kernel_shape=DISC_KERNEL, channel_dim=GEN_SIZE_2, layer_name='gen_conv1')
-            deconv2 = deconvLayer(input_tensor=conv1,    channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
-            conv2   = convLayer(input_tensor=deconv2, kernel_shape=DISC_KERNEL, channel_dim=GEN_SIZE_4, layer_name='gen_conv2')
+            #deconv2 = deconvLayer(input_tensor=conv1,    channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
+            #conv2   = convLayer(input_tensor=deconv2, kernel_shape=DISC_KERNEL, channel_dim=GEN_SIZE_4, layer_name='gen_conv2')
             #hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, 'gen_conv3')
             #hidden4 =    convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, 'gen_conv4')
             #hidden_out = convLayer(hidden4,      DISC_KERNEL,  HIDDEN_SIZE_5, 'gen_conv_out')
@@ -159,7 +159,7 @@ with tf.device(DEVICE):
 
             # Don't apply normalization (batch)
             # to output layer
-            final = tf.layers.conv2d_transpose(inputs=conv2,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
+            final = tf.layers.conv2d_transpose(inputs=conv1,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
             #final = tf.layers.conv2d_transpose(inputs=deconv4,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
             image_shaped_gen= tf.reshape(final,[-1, BIG_SIZE1, BIG_SIZE2, NUM_CHANNELS])
             tf.summary.image('generated_input', image_shaped_gen, NUM_SUMMARY)
@@ -171,11 +171,12 @@ with tf.device(DEVICE):
             #fake_data = generator(g)
 
         with tf.variable_scope("discriminator") as scope:
-            squared_diff = tf.squared_difference(image_shaped_true, fake_data)
+            #diff = tf.squared_difference(image_shaped_true, fake_data)
+            diff = tf.abs(image_shaped_true - fake_data)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
-            generator_loss = tf.reduce_mean(squared_diff)
+            generator_loss = tf.reduce_sum(diff)#tf.reduce_mean(diff)
             tf.summary.scalar('loss', generator_loss)
 
         # Define optimizer
