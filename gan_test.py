@@ -68,21 +68,48 @@ def init_weight(shape,name,sd=None):
            initial = tf.truncated_normal(shape, stddev=sd)
            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
 
+def _phase_shift(I, r):
+    # Helper function with main phase shift operation
+    bsize, a, b, c = I.get_shape().as_list()
+    X = tf.reshape(I, (bsize, a, b, r, r))
+    X = tf.transpose(X, (0, 1, 2, 4, 3))  # bsize, a, b, 1, 1
+    X = tf.split(X, a, 1)  # a, [bsize, b, r, r]
+    X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, b, a*r, r
+    X = tf.split(X, b, 1)  # b, [bsize, a*r, r]
+    X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, a*r, b*r
+    return tf.reshape(X, (bsize, a*r, b*r, 1))
+
+def subPixelLayer(input_tensor, r_size):
+    Xc = tf.split(input_tensor, 3, 3)
+    X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
+    return X
+
 #input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
 #conv_layer = tf.layers.conv2d(input_tensor, 3, kernel_size=[5,5], strides=(2,2), padding='same',activation=None)
 
-gen_input = init_weight([1,10,10,128],"genput")
-KERNEL = [6,6]
-STRIDES = (1,1) #(2,2)
-PAD = "valid"#"same"
-deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=256,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
-#conv1 = tf.layers.conv2d(deconv1, 3, kernel_size=[3,3], strides=(1,1), padding='valid',activation=None)
-#conv1 =   tf.layers.conv2d(deconv1,256,[3,3],strides=(2,2),padding='valid',activation=None)
-deconv2 = tf.layers.conv2d_transpose(inputs=deconv1,  filters=256,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
-#conv2 =   tf.layers.conv2d(deconv2,256,[3,3],strides=(2,2),padding='valid',activation=None)
-deconv3 = tf.layers.conv2d_transpose(inputs=deconv2,  filters=128,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
-#conv3 =   tf.layers.conv2d(deconv3,128,[3,3],strides=(2,2),padding='valid',activation=None)
-deconv4 = tf.layers.conv2d_transpose(inputs=deconv3,  filters=3,  kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
+gen_input = init_weight([50,12,10,128],"genput")
+#deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=256,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
+conv1 = tf.layers.conv2d(gen_input, 12, kernel_size=[3,3], strides=(2,2), padding='same',activation=None)
+##Xc = tf.split(conv1, 3, 3)
+##I = Xc[0]
+##r = 2
+##bsize, a, b, c = I.get_shape().as_list()
+##X = tf.reshape(I, (bsize, a, b, r, r))
+##X = tf.transpose(X, (0, 1, 2, 4, 3))  # bsize, a, b, 1, 1
+##X = tf.split(X, a, 1)  # a, [bsize, b, r, r]
+##X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, b, a*r, r
+##X = tf.split(X, b, 1)  # b, [bsize, a*r, r]
+##X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, a*r, b*r
+##HODOR
+
+sp1 = subPixelLayer(conv1, 2)
+#deconv2 = tf.layers.conv2d_transpose(inputs=deconv1,  filters=256,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
+conv2 =   tf.layers.conv2d(sp1,75, kernel_size=[3,3],strides=(2,2),padding='same',activation=None)
+sp2 = subPixelLayer(conv2, 5)
+#deconv3 = tf.layers.conv2d_transpose(inputs=deconv2,  filters=128,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
+conv3 =   tf.layers.conv2d(sp2,300, kernel_size=[3,3],strides=(2,2),padding='same',activation=None)
+sp3 = subPixelLayer(conv3, 10)
+#deconv4 = tf.layers.conv2d_transpose(inputs=deconv3,  filters=3,  kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
 #conv4 =   tf.layers.conv2d(deconv4,3,[2,2],strides=(2,2),padding='valid',activation=None)
 #flat = tf.contrib.layers.flatten(deconv4)
 #dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.identity)
