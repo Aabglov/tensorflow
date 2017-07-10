@@ -148,10 +148,11 @@ with tf.device(DEVICE):
             X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, a*r, b*r
             return tf.reshape(X, (bsize, a*r, b*r, 1))
 
-        def subPixelLayer(input_tensor, r_size):
+        def subPixelLayer(input_tensor, r_size, act=tf.nn.relu):
             Xc = tf.split(input_tensor, 3, 3)
             X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
-            return X
+            norm = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
+            return norm#X
 
         # DEFINE GENERATOR USING DECONVOLUTION
         def generatorDeconv(gen_in):
@@ -166,7 +167,8 @@ with tf.device(DEVICE):
             #   Also only use stride of (1,1) so as to make the final subpixel layer increase the image size
             #   Use tanh as the activation based on various papers I've read
             conv4 = tf.layers.conv2d(subp3,NUM_CHANNELS*(SUB_PIXEL**2),GEN_KERNEL,(1,1),padding='same',activation=tf.nn.tanh)
-            final = subPixelLayer(input_tensor=conv4, r_size=SUB_PIXEL)
+            split = tf.split(conv4, 3, 3)
+            final = tf.concat([_phase_shift(x, SUB_PIXEL) for x in split], 3)
             #deconv2 = deconvLayer(input_tensor=conv1,    channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
             # Don't apply normalization (batch)
             # to output layer
