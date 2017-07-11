@@ -158,11 +158,12 @@ with tf.device(DEVICE):
         def subPixelLayer(input_tensor, r_size, act=tf.nn.relu, normalize=True):
             Xc = tf.split(input_tensor, 3, 3)
             X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
-            if normalize:
-                out = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
-                return out
-            else:
-                return X
+            return X
+            #if normalize:
+            #    out = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
+            #    return out
+            #else:
+            #    return X
 
         # DEFINE GENERATOR USING SUBPIXEL CONV LAYERS
         def generatorSubpixel(gen_in):
@@ -176,8 +177,8 @@ with tf.device(DEVICE):
             subp2 = subPixelLayer(input_tensor=conv2, r_size=SUB_PIXEL)
             #conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL_2**2), strides=GEN_STRIDES, layer_name='gen_conv3')
             #subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
-            conv_out = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv4')
-            #conv_out = tf.layers.conv2d(subp2, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.relu)
+            #conv_out = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv4')
+            conv_out = tf.layers.conv2d(subp2, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.tanh)
             final_out = subPixelLayer(input_tensor=conv_out, r_size=SUB_PIXEL,act=tf.nn.tanh, normalize=False)
 
             image_shaped_gen= tf.reshape(final_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
