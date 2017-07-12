@@ -36,19 +36,20 @@ IMG_SIZE2 = 48
 
 # GENERATOR
 GEN_SIZE_IN = 100
-GEN_IN_X = 4#20
-GEN_IN_Y = 3#17
-GEN_CHANNELS = 4 * NUM_CHANNELS#1024
+GEN_IN_X = 8#20
+GEN_IN_Y = 6#17
+SUB_PIXEL = 4
+GEN_CHANNELS = (SUB_PIXEL ** 2) * NUM_CHANNELS * 10
 GEN_TOTAL_IN = GEN_IN_X * GEN_IN_Y * GEN_CHANNELS
-GEN_SIZE_1 = 512 # 1st layer number of features
-GEN_SIZE_2 = 256 # 2nd layer number of features
+GEN_SIZE_1 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 5 #512 # 1st layer number of features
+GEN_SIZE_2 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 2#256 # 2nd layer number of features
 GEN_SIZE_3 = 128 # 3rd layer
 GEN_SIZE_4 = 64# final layer
 GEN_KERNEL = [3,3] #[5,5]
 DECONV_STRIDES = (2,2)
 CONV_KERNEL = [2,2]
 GEN_STRIDES = (2,2)
-SUB_PIXEL = 4
+
 
 # DISCRIMINATOR
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
@@ -170,10 +171,10 @@ with tf.device(DEVICE):
             linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
             shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
 
-            subp0 = subPixelLayer(input_tensor=shaped_in, r_size=2)
-            conv1 = convLayer(input_tensor=subp0, kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv1')
+            #subp0 = subPixelLayer(input_tensor=shaped_in, r_size=2)
+            conv1 = convLayer(input_tensor=shaped_in, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=GEN_STRIDES, layer_name='gen_conv1')
             subp1 = subPixelLayer(input_tensor=conv1, r_size=SUB_PIXEL)
-            conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv2')
+            conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_2, strides=GEN_STRIDES, layer_name='gen_conv2')
             subp2 = subPixelLayer(input_tensor=conv2, r_size=SUB_PIXEL)
             #conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL_2**2), strides=GEN_STRIDES, layer_name='gen_conv3')
             #subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
