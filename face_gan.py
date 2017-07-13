@@ -36,18 +36,16 @@ IMG_SIZE2 = 48
 
 # GENERATOR
 GEN_SIZE_IN = 100
-GEN_IN_X = 8#20
-GEN_IN_Y = 6#17
+GEN_IN_X = 4#8#20
+GEN_IN_Y = 3#6#17
 SUB_PIXEL = 4
-GEN_CHANNELS = (SUB_PIXEL ** 2) * NUM_CHANNELS * 10
-GEN_TOTAL_IN = GEN_IN_X * GEN_IN_Y * GEN_CHANNELS
-GEN_SIZE_1 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 5 #512 # 1st layer number of features
-GEN_SIZE_2 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 2#256 # 2nd layer number of features
-GEN_SIZE_3 = 128 # 3rd layer
-GEN_SIZE_4 = 64# final layer
-GEN_KERNEL = [3,3] #[5,5]
+GEN_CHANNELS = 1024 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 22
+GEN_SIZE_1 = 512 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 11 # 1st layer number of features
+GEN_SIZE_2 = 256 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 5  # 2nd layer number of features
+GEN_SIZE_3 = 128 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 3 # 3rd layer
+GEN_SIZE_4 = 64  #(SUB_PIXEL ** 2) * NUM_CHANNELS * 1 # final layer
+GEN_KERNEL = [5,5]
 DECONV_STRIDES = (2,2)
-CONV_KERNEL = [2,2]
 GEN_STRIDES = (2,2)
 
 
@@ -224,8 +222,8 @@ with tf.device(DEVICE):
 
 
         with tf.variable_scope("generator") as scope:
-            #fake_data = generatorDeconv(g_shaped)
-            fake_data = generatorSubpixel(g_shaped)
+            fake_data = generatorDeconv(g_shaped)
+            #fake_data = generatorSubpixel(g_shaped)
 
         with tf.variable_scope("discriminator") as scope:
             fake_prob,fake_logits = discriminatorConv(fake_data)
@@ -236,7 +234,6 @@ with tf.device(DEVICE):
 
         # Define loss function(s)
         with tf.name_scope('loss'):
-
             discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
             discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
             discriminator_loss = discriminator_loss_real + discriminator_loss_fake
