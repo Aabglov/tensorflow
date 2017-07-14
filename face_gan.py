@@ -39,13 +39,12 @@ GEN_SIZE_IN = 100
 GEN_IN_X = 4#8#20
 GEN_IN_Y = 3#6#17
 SUB_PIXEL = 4
-GEN_CHANNELS = 1024 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 22
-GEN_SIZE_1 = 512 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 11 # 1st layer number of features
-GEN_SIZE_2 = 256 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 5  # 2nd layer number of features
-GEN_SIZE_3 = 128 #(SUB_PIXEL ** 2) * NUM_CHANNELS * 3 # 3rd layer
-GEN_SIZE_4 = 64  #(SUB_PIXEL ** 2) * NUM_CHANNELS * 1 # final layer
+GEN_CHANNELS = (SUB_PIXEL ** 2) * NUM_CHANNELS * 22 #1024
+GEN_SIZE_1 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 11 #512 # 1st layer number of features
+GEN_SIZE_2 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 5  #256 # 2nd layer number of features
+GEN_SIZE_3 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 3 #128 # 3rd layer
+GEN_SIZE_4 = (SUB_PIXEL ** 2) * NUM_CHANNELS * 1 #64 # final layer
 GEN_KERNEL = [5,5]
-DECONV_STRIDES = (2,2)
 GEN_STRIDES = (2,2)
 
 
@@ -155,7 +154,8 @@ with tf.device(DEVICE):
             return tf.reshape(X, [-1, a*r, b*r, 1])
 
         def subPixelLayer(input_tensor, r_size, act=tf.nn.relu, normalize=True):
-            Xc = tf.split(input_tensor, 3, 3)
+            num_splits = int(input_tensor.get_shape().as_list()[-1] / (r_size ** 2))
+            Xc = tf.split(input_tensor, num_splits, 3)
             X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
             return X
             #if normalize:
@@ -169,15 +169,24 @@ with tf.device(DEVICE):
             linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
             shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
 
-            #subp0 = subPixelLayer(input_tensor=shaped_in, r_size=2)
-            conv1 = convLayer(input_tensor=shaped_in, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=GEN_STRIDES, layer_name='gen_conv1')
-            subp1 = subPixelLayer(input_tensor=conv1, r_size=SUB_PIXEL)
+            # These two layers are special.
+            # Because our gen size contains a small odd number (GEN_IN_Y = 3)
+            # if we perform a convolution with strides of (2,2) our
+            # output shape is 2,2.
+            # This make our subpixellayer increase the size to 8,8 and we'd always have a square image.
+            # To combat this we reduce the strides to (1,1) to preserve shape in the conv layer.
+            # This, however, means that the subpixel layer needs to only double the size
+            #   Not quadruple the size like the other layers.
+            # Thus it's r value is hardcoded to 2
+            conv1 = convLayer(input_tensor=shaped_in, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=(1,1), layer_name='gen_conv1')
+            subp1 = subPixelLayer(input_tensor=conv1, r_size=2)
+            # Additional hidden subpixel layers
             conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_2, strides=GEN_STRIDES, layer_name='gen_conv2')
             subp2 = subPixelLayer(input_tensor=conv2, r_size=SUB_PIXEL)
-            #conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL_2**2), strides=GEN_STRIDES, layer_name='gen_conv3')
-            #subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
+            conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_3, strides=GEN_STRIDES, layer_name='gen_conv3')
+            subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
             #conv_out = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv4')
-            conv_out = tf.layers.conv2d(subp2, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.tanh)
+            conv_out = tf.layers.conv2d(subp3, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.tanh)
             final_out = subPixelLayer(input_tensor=conv_out, r_size=SUB_PIXEL,act=tf.nn.tanh, normalize=False)
 
             image_shaped_gen= tf.reshape(final_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
@@ -189,11 +198,11 @@ with tf.device(DEVICE):
         def generatorDeconv(gen_in):
             linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
             shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
-            deconv1 = deconvLayer(input_tensor=shaped_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv1")
-            deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv2")
-            deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=DECONV_STRIDES,layer_name="deconv3")
+            deconv1 = deconvLayer(input_tensor=shaped_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv1")
+            deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv2")
+            deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv3")
             #deconv4 = deconvLayer(input_tensor=deconv3,channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=(2,2),conv_kernel=CONV_KERNEL,conv_strides=(2,2),layer_name="deconv4")
-            deconv_out = tf.layers.conv2d_transpose(inputs=deconv3,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=DECONV_STRIDES,padding='same',activation=tf.nn.tanh)
+            deconv_out = tf.layers.conv2d_transpose(inputs=deconv3,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=GEN_STRIDES,padding='same',activation=tf.nn.tanh)
             #flat = tf.contrib.layers.flatten(deconv_out)
             #dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
             image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
@@ -222,8 +231,8 @@ with tf.device(DEVICE):
 
 
         with tf.variable_scope("generator") as scope:
-            fake_data = generatorDeconv(g_shaped)
-            #fake_data = generatorSubpixel(g_shaped)
+            #fake_data = generatorDeconv(g_shaped)
+            fake_data = generatorSubpixel(g_shaped)
 
         with tf.variable_scope("discriminator") as scope:
             fake_prob,fake_logits = discriminatorConv(fake_data)

@@ -32,7 +32,7 @@ ORIG_IMG_SIZE2 = 178
 
 # Resize the images so it doesn't crash my computer
 IMG_SIZE1 = 64
-IMG_SIZE2 = 52
+IMG_SIZE2 = 48
 
 # GENERATOR
 GEN_SIZE_IN = 100
@@ -45,8 +45,9 @@ GEN_SIZE_2 = 256 # 2nd layer number of features
 GEN_SIZE_3 = 128 # 3rd layer
 GEN_SIZE_4 = 64# final layer
 GEN_KERNEL = [5,5]
-DECONV_STRIDES = (2,2)
+GEN_STRIDES = (2,2)
 CONV_KERNEL = [2,2]
+SUB_PIXEL = 4
 
 # DISCRIMINATOR
 HIDDEN_SIZE_1 = 32 # 1st layer number of features
@@ -68,33 +69,60 @@ def init_weight(shape,name,sd=None):
            initial = tf.truncated_normal(shape, stddev=sd)
            return tf.get_variable(name="{}_weights".format(name), initializer=initial)
 
+def convLayer(input_tensor, kernel_shape, channel_dim, strides, layer_name, dr=0.2, pool_size=3, act=tf.nn.relu):
+    with tf.variable_scope(layer_name) as scope:
+        # 2D Convolution
+        conv = tf.layers.conv2d(input_tensor,channel_dim,kernel_shape,strides=strides,padding='same',activation=None)
+        # Pooling
+        #pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
+        # Psuedo down-sampling
+        #down = tf.layers.conv2d(conv, channel_dim, [pool_size,pool_size], (pool_size,pool_size), padding='valid', activation=None)
+        #norm = tf.layers.dropout(inputs=act_out, rate=dr)
+        norm = act(tf.layers.batch_normalization(conv,momentum=0.9,epsilon=1e-5,training=True))
+        return norm
+
+
 def _phase_shift(I, r):
     # Helper function with main phase shift operation
     bsize, a, b, c = I.get_shape().as_list()
-    X = tf.reshape(I, (bsize, a, b, r, r))
-    X = tf.transpose(X, (0, 1, 2, 4, 3))  # bsize, a, b, 1, 1
+    X = tf.reshape(I, [-1, a, b, r, r])
+    X = tf.transpose(X, [0, 1, 2, 4, 3])  # bsize, a, b, 1, 1
     X = tf.split(X, a, 1)  # a, [bsize, b, r, r]
     X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, b, a*r, r
     X = tf.split(X, b, 1)  # b, [bsize, a*r, r]
     X = tf.concat([tf.squeeze(x) for x in X], 2)  # bsize, a*r, b*r
-    return tf.reshape(X, (bsize, a*r, b*r, 1))
+    return tf.reshape(X, [-1, a*r, b*r, 1])
 
-def subPixelLayer(input_tensor, r_size):
-    Xc = tf.split(input_tensor, 3, 3)
+def subPixelLayer(input_tensor, r_size, act=None, normalize=None):
+    num_splits = int(input_tensor.get_shape().as_list()[-1] / (r_size ** 2))
+    Xc = tf.split(input_tensor, num_splits, 3)
     X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
     return X
+
 
 #input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
 #conv_layer = tf.layers.conv2d(input_tensor, 3, kernel_size=[5,5], strides=(2,2), padding='same',activation=None)
 
-gen_input = init_weight([50,8,6,128],"genput")
-#deconv1 = tf.layers.conv2d_transpose(inputs=gen_input,filters=256,kernel_size=KERNEL,strides=STRIDES,padding=PAD,activation=tf.nn.relu)
-conv1 = tf.layers.conv2d(gen_input, 48, kernel_size=[3,3], strides=(2,2), padding='same',activation=None)
-sp1 = subPixelLayer(conv1, 4)
-conv2 =   tf.layers.conv2d(sp1,48, kernel_size=[3,3],strides=(2,2),padding='same',activation=None)
-sp2 = subPixelLayer(conv2, 4)
-conv3 =   tf.layers.conv2d(sp2,48, kernel_size=[3,3],strides=(2,2),padding='same',activation=None)
-sp3 = subPixelLayer(conv3, 4)
+gen_input = init_weight([111,4,3,1024],"genput")
+conv1 = convLayer(input_tensor=gen_input, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=(1,1), layer_name='gen_conv1')
+subp1 = subPixelLayer(input_tensor=conv1, r_size=2)
+# Additional hidden subpixel layers
+conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_2, strides=GEN_STRIDES, layer_name='gen_conv2')
+subp2 = subPixelLayer(input_tensor=conv2, r_size=SUB_PIXEL)
+conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_3, strides=GEN_STRIDES, layer_name='gen_conv3')
+subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
+#conv_out = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv4')
+conv_out = tf.layers.conv2d(subp3, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.tanh)
+final_out = subPixelLayer(input_tensor=conv_out, r_size=SUB_PIXEL, act=tf.nn.tanh, normalize=False)
+
+image_shaped_gen= tf.reshape(final_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
+
+
+#sp1 = subPixelLayer(conv1, 2)
+#conv2 =   tf.layers.conv2d(sp1,48, kernel_size=[5,5],strides=(2,2),padding='same',activation=None)
+#sp2 = subPixelLayer(conv2, 4)
+#conv3 =   tf.layers.conv2d(sp2,48, kernel_size=[5,5],strides=(2,2),padding='same',activation=None)
+#sp3 = subPixelLayer(conv3, 4)
 
 
 HODOR
