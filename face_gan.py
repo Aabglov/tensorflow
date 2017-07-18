@@ -157,12 +157,11 @@ with tf.device(DEVICE):
             num_splits = int(input_tensor.get_shape().as_list()[-1] / (r_size ** 2))
             Xc = tf.split(input_tensor, num_splits, 3)
             X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
-            return X
-            #if normalize:
-            #    out = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
-            #    return out
-            #else:
-            #    return X
+            if normalize:
+                out = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
+                return out
+            else:
+                return X
 
         # DEFINE GENERATOR USING SUBPIXEL CONV LAYERS
         def generatorSubpixel(gen_in):
@@ -178,15 +177,18 @@ with tf.device(DEVICE):
             # This, however, means that the subpixel layer needs to only double the size
             #   Not quadruple the size like the other layers.
             # Thus it's r value is hardcoded to 2
-            conv1 = convLayer(input_tensor=shaped_in, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=(1,1), layer_name='gen_conv1')
+            #conv1 = convLayer(input_tensor=shaped_in, kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_1, strides=(1,1), layer_name='gen_conv1')
+            conv1 = tf.layers.conv2d(shaped_in,GEN_SIZE_1,GEN_KERNEL,strides=(1,1),padding='same',activation=None)
             subp1 = subPixelLayer(input_tensor=conv1, r_size=2)
             # Additional hidden subpixel layers
-            conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_2, strides=GEN_STRIDES, layer_name='gen_conv2')
+            #conv2 = convLayer(input_tensor=subp1,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_2, strides=GEN_STRIDES, layer_name='gen_conv2')
+            conv2 = tf.layers.conv2d(subp1,GEN_SIZE_2,GEN_KERNEL,strides=GEN_STRIDES,padding='same',activation=None)
             subp2 = subPixelLayer(input_tensor=conv2, r_size=SUB_PIXEL)
-            conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_3, strides=GEN_STRIDES, layer_name='gen_conv3')
+            #conv3 = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=GEN_SIZE_3, strides=GEN_STRIDES, layer_name='gen_conv3')
+            conv3 = tf.layers.conv2d(subp2,GEN_SIZE_3,GEN_KERNEL,strides=GEN_STRIDES,padding='same',activation=None)
             subp3 = subPixelLayer(input_tensor=conv3, r_size=SUB_PIXEL)
             #conv_out = convLayer(input_tensor=subp2,  kernel_shape=GEN_KERNEL, channel_dim=NUM_CHANNELS*(SUB_PIXEL**2), strides=GEN_STRIDES, layer_name='gen_conv4')
-            conv_out = tf.layers.conv2d(subp3, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=tf.nn.tanh)
+            conv_out = tf.layers.conv2d(subp3, NUM_CHANNELS*(SUB_PIXEL**2), GEN_KERNEL, strides=GEN_STRIDES, padding='same', activation=None)
             final_out = subPixelLayer(input_tensor=conv_out, r_size=SUB_PIXEL,act=tf.nn.tanh, normalize=False)
 
             image_shaped_gen= tf.reshape(final_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
