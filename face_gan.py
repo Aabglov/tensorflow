@@ -161,7 +161,7 @@ with tf.device(DEVICE):
                 out = act(tf.layers.batch_normalization(X,momentum=0.9,epsilon=1e-5,training=True))
                 return out
             else:
-                return X
+                return act(X)
 
         # DEFINE GENERATOR USING SUBPIXEL CONV LAYERS
         def generatorSubpixel(gen_in):
