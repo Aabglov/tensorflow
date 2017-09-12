@@ -233,8 +233,8 @@ with tf.device(DEVICE):
 
 
         with tf.variable_scope("generator") as scope:
-            #fake_data = generatorDeconv(g_shaped)
-            fake_data = generatorSubpixel(g_shaped)
+            fake_data = generatorDeconv(g_shaped)
+            #fake_data = generatorSubpixel(g_shaped)
 
         with tf.variable_scope("discriminator") as scope:
             fake_prob,fake_logits = discriminatorConv(fake_data)
