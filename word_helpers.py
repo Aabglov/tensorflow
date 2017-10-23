@@ -2,16 +2,16 @@
 import random
 import os
 import numpy as np # Used for One-hot encoding
-
+import json # Used for json helper
 
 class Vocabulary:
-    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8', custom_eos=u'\xa4'):
+    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8', custom_eos=u'\xa4', custom_split=u'\u00BB'):
         if not vocab:
             # DEFAULT MAGIC THE GATHERING VOCABULARY
             self.vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
                      '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
                      '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac', u'\xf8', u'\xa4']
+                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac', u'\xf8', u'\xa4',u'\u00BB']
         else:
             self.vocab = vocab
 
@@ -20,13 +20,15 @@ class Vocabulary:
         self.unk_char = custom_unk
         self.pad_char = custom_pad
         self.eos_char = custom_eos
-        for c in [custom_go,custom_unk,custom_pad,custom_eos]:
+        self.split_char = custom_split
+        for c in [custom_go,custom_unk,custom_pad,custom_eos,custom_split]:
             if c not in self.vocab:
                 self.vocab.append(c)
         self.eos = self.vocab.index(self.eos_char)
         self.go = self.vocab.index(self.go_char)
         self.pad = self.vocab.index(self.pad_char)
         self.unk = self.vocab.index(self.unk_char)
+        self.split = self.vocab.index(self.split_char)
 
         # Set values to class
         self.vocab_size = len(self.vocab)
@@ -214,6 +216,66 @@ class WordHelper:
         self.ValidBatches = BatchGenerator(self.valid_batches,self.vocab)
 
 
+class JSONHelper:
+    def __init__(self,filepath,vocab_list=None, custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8' ,custom_eos=u'\xa4', custom_split=u'\u00BB', split_ratio=[0.8,0.1,0.1]):
+
+        self.train_batches = []
+        self.test_batches = []
+        self.valid_batches = []
+        # Generate vocabulary
+        count = 1
+        with open(filepath,"r") as f:
+            data = json.load(f)
+
+        total = len(data)
+
+        # Determine the indices by which we'll
+        # split our data
+        train_end = int(total * split_ratio[0])
+        test_end = train_end + int(total * split_ratio[1])
+        if not vocab_list:
+            # Create our character vocaulary
+            self.vocab_list = []
+        else:
+            self.vocab_list = vocab_list
+
+        # for each row in raw_txt
+        for k,v in data.items():
+            print("row {} of {} complete".format(count,total))
+            count += 1
+            r = "{}{}{}".format(k,custom_split,v)
+            # for each letter in that row
+            for l in r:
+                if l not in self.vocab_list:
+                    self.vocab_list.append(l)
+
+            # Skip empty lines
+            if r.replace(" ","") != "":
+                # Add our go and eos tags
+                if r[-1] != custom_eos:
+                    r = custom_go + r + custom_eos
+                else:
+                    r = custom_go + r
+
+                if count < train_end:
+                    self.train_batches.append(r)
+                elif count >= train_end and count < test_end:
+                    self.test_batches.append(r)
+                elif count >= test_end:
+                    self.valid_batches.append(r)
+
+            else:
+                # Don't empty lines to our batches
+                pass
+
+        # Create our vocabulary object
+        self.vocab = Vocabulary(self.vocab_list,custom_go,custom_unk,custom_pad,custom_eos,custom_split) # Pass our custom tags
+
+        # All these batches tryin' to front!
+        self.TrainBatches = BatchGenerator(self.train_batches,self.vocab)
+        self.TestBatches = BatchGenerator(self.test_batches,self.vocab)
+        self.ValidBatches = BatchGenerator(self.valid_batches,self.vocab)
+
 
 
 
@@ -242,6 +304,24 @@ def mtg_test():
         a,b = wh.ValidBatches.next()
         print(wh.vocab.onehot2char(a),wh.vocab.onehot2char(b))
 
+def json_test():
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    data_path = os.path.join(dir_path,"data","dictionary.json")
+
+    jh = JSONHelper(data_path)
+    for _ in range(2500):
+        a,b = jh.TrainBatches.next()
+        print(jh.vocab.onehot2char(a),jh.vocab.onehot2char(b))
+
+    for _ in range(250):
+        a,b = jh.TestBatches.next()
+        print(jh.vocab.onehot2char(a),jh.vocab.onehot2char(b))
+
+    for _ in range(250):
+        a,b = jh.ValidBatches.next()
+        print(jh.vocab.onehot2char(a),jh.vocab.onehot2char(b))
+
 
 if __name__ == "__main__":
-    mtg_test()
+    #mtg_test()
+    json_test()

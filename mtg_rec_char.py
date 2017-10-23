@@ -8,22 +8,22 @@ import os
 import word_helpers
 import pickle
 import time
-
+import caffeine
 
 # PATHS -- absolute
-dir_path = os.path.dirname(os.path.realpath(__file__))
-model_path = os.path.join(dir_path,"saved","mtg","mtg_rec_char_steps.ckpt")
-checkpoint_path = os.path.join(dir_path,"saved","mtg")
-data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
+SAVE_DIR = "dict" # mtg
+CHECKPOINT_NAME = "dict_steps.ckpt" # "mtg_rec_char_steps.ckpt"
+DATA_NAME = "dictionary.json" # "cards_tokenized.txt"
+PICKLE_PATH = "dict_tokenized.pkl" #"mtg_tokenized_wh.pkl"
 
-# Load mtg tokenized data
-# Special thanks to mtgencode: https://github.com/billzorn/mtgencode
-with open(data_path,"r") as f:
-    # Each card occupies its own line in this tokenized version
-    raw_txt = f.read()#.split("\n")
+dir_path = os.path.dirname(os.path.realpath(__file__))
+model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
+checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
+data_path = os.path.join(dir_path,"data",DATA_NAME)
+
 
 try:
-    with open(os.path.join(dir_path,"data","mtg_tokenized_wh.pkl"),"rb") as f:
+    with open(os.path.join(dir_path,"data",PICKLE_PATH),"rb") as f:
         WH = pickle.load(f)
 except Exception as e:
     print(e)
@@ -38,11 +38,19 @@ except Exception as e:
     vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
              '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
              '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-             "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xf8',u'\xa4']
+             "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xf8',u'\xa4',u'\u00BB']
 
-    WH = word_helpers.WordHelper(raw_txt, vocab)
+    # Load mtg tokenized data
+    # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
+    # with open(data_path,"r") as f:
+    #     # Each card occupies its own line in this tokenized version
+    #     raw_txt = f.read()#.split("\n")
+    # WH = word_helpers.WordHelper(raw_txt, vocab)
+    WH = word_helpers.JSONHelper(data_path,vocab)
+
+
     # Save our WordHelper
-    with open(os.path.join(dir_path,"data","mtg_tokenized_wh.pkl"),"wb") as f:
+    with open(os.path.join(dir_path,"data",PICKLE_PATH),"wb") as f:
         pickle.dump(WH,f)
 
 
@@ -151,7 +159,7 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 13773
+        already_trained = 0
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
