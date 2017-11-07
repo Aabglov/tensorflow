@@ -3,6 +3,7 @@ import tensorflow as tf
 import pickle
 import os
 import time
+import word_helpers
 
 #from tensorflow.examples.tutorials.mnist import input_data
 #mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
@@ -11,9 +12,10 @@ import time
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
 CHKPT_PATH = os.path.join(DIR_PATH,"saved","conv")
-LOG_DIR = "/tmp/tensorflow/log"#os.path.join(DIR_PATH,"tensorboard","conv")
-DATA_PATH = os.path.join(DIR_PATH,"data","celeb")
-
+LOG_DIR = "/tmp/tensorflow/log"
+DATA_PATH = os.path.join(DIR_PATH,"data","cards_tokenized.txt")
+PICKLE_NAME = "text_gan_data.pkl"
+PICKLE_PATH = os.path.join(DIR_PATH,"data",PICKLE_NAME)
 
 # Set random seed
 seed = 36 # Pick your favorite
@@ -46,6 +48,27 @@ BATCH_SIZE = 50
 MAX_STEPS = 40000
 LOG_FREQUENCY = 100
 
+try:
+    with open(PICKLE_PATH,"rb") as f:
+        WH = pickle.load(f)
+except Exception as e:
+    # Load mtg tokenized data
+    # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
+    with open(DATA_PATH,"r") as f:
+        # Each card occupies its own line in this tokenized version
+        raw_txt = f.read()#.split("\n")
+    WH = word_helpers.WordHelper(raw_txt)
+    with open(PICKLE_PATH,"wb+") as f:
+        pickle.dump(WH,f)
+
+GRAD_CLIP = 5.0
+N_INPUT = WH.vocab.vocab_size
+N_CLASSES = WH.vocab.vocab_size
+LSTM_SIZE = 512
+NUM_LAYERS = 3
+NUM_STEPS = 100#250
+
+
 
 if tf.gfile.Exists(LOG_DIR):
     tf.gfile.DeleteRecursively(LOG_DIR)
@@ -65,8 +88,8 @@ with tf.device(DEVICE):
             y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
             dropout_prob = tf.placeholder(tf.float32)
             # Our initial state placeholder:
-            gen_init_state = tf.placeholder(tf.float32, [num_layers, 2, None, lstm_size], name='gen_state_placeholder')
-            dis_init_state = tf.placeholder(tf.float32, [num_layers, 2, None, lstm_size], name='dis_state_placeholder')
+            gen_init_state = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='gen_state_placeholder')
+            dis_init_state = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='dis_state_placeholder')
 
         # Recurrent Neural Network
         def RNN(input_tensor,init_state,num_layers,lstm_size,num_classes,dropout_prob):
@@ -158,15 +181,12 @@ with tf.device(DEVICE):
 
 
         with tf.variable_scope("generator") as scope:
-            fake_data = generatorDeconv(g_shaped)
-            #fake_data = generatorSubpixel(g_shaped)
+            fake_data,fake_state = generator(x)
 
         with tf.variable_scope("discriminator") as scope:
-            fake_prob,fake_logits = discriminatorConv(fake_data)
-            #fake_prob = discriminator(fake_data)
+            fake_prob,fake_logits = discriminator(fake_data)
             scope.reuse_variables()
-            real_prob,real_logits = discriminatorConv(image_shaped_input)
-            #real_prob = discriminator(x)
+            real_prob,real_logits = discriminator(y)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
@@ -174,8 +194,6 @@ with tf.device(DEVICE):
             discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
             discriminator_loss = discriminator_loss_real + discriminator_loss_fake
             generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
-            #discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
-            #generator_loss = -tf.reduce_mean(tf.log(fake_prob))
             tf.summary.scalar('discriminator_loss', discriminator_loss)
             tf.summary.scalar('generator_loss', generator_loss)
 
@@ -214,21 +232,28 @@ with tf.device(DEVICE):
         except Exception as e:
             print("Model restore failed {}".format(e))
 
-        #train_batcher = Batcher(TRAIN_DATASET,TRAIN_LABELS)
-        #total_batch = int(len(TRAIN_DATASET)/BATCH_SIZE)
-        #Coordinate the loading of image files.
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
 
         # Training cycle
-        for epoch in range(1,MAX_STEPS):
-
-
-            G_INPUT = np.random.uniform(-1., 1., size=[BATCH_SIZE,GEN_SIZE_IN])
-            # Run optimization op (backprop) and cost op (to get loss value)
-            summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict={g: G_INPUT})
-            train_writer.add_summary(summary, epoch)
-            print('Adding run data for', epoch)
+        already_trained
+        for epoch in range(already_trained,already_trained+MAX_STEPS):
+            # Set learning rate
+            sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            # Generate a batch
+            batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
+            # Reset state value
+            gen_state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+            dis_state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+            for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS):
+                batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                print(batch_x)
+                print(batch_y)
+                HODOR
+                # Run optimization op (backprop) and cost op (to get loss value)
+                fd= {x: batch_x, y: batch_y, gen_init_state: gen_state, dis_init_state: dis_state}
+                summary,img, g_unused, _d,_g = sess.run([merged, image, fake_data, train_d_step, train_g_step], feed_dict=fd)
+                train_writer.add_summary(summary, epoch)
+                print('Adding run data for', epoch)
 
 
             # Display logs per epoch step

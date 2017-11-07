@@ -99,8 +99,6 @@ def subPixelLayer(input_tensor, r_size, act=None, normalize=None):
     X = tf.concat([_phase_shift(x, r_size) for x in Xc], 3)
     return X
 
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
 #input_tensor = init_weight([1,IMG_SIZE1,IMG_SIZE2,3],"input")
 #conv_layer = tf.layers.conv2d(input_tensor, 3, kernel_size=[5,5], strides=(2,2), padding='same',activation=None)
