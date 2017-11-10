@@ -10,8 +10,8 @@ import word_helpers
 
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-SAVE_PATH = os.path.join(DIR_PATH,"saved","conv","model.ckpt")
-CHKPT_PATH = os.path.join(DIR_PATH,"saved","conv")
+SAVE_PATH = os.path.join(DIR_PATH,"saved","text","model.ckpt")
+CHKPT_PATH = os.path.join(DIR_PATH,"saved","text")
 LOG_DIR = "/tmp/tensorflow/log"
 DATA_PATH = os.path.join(DIR_PATH,"data","cards_tokenized.txt")
 PICKLE_NAME = "text_gan_data.pkl"
@@ -125,12 +125,12 @@ with tf.device(DEVICE):
             # fake data.
             # It uses a RNN to predict one letter at a time
             # in order to produce a whole sample (multiple words).
-            num_layers = 3
-            lstm_size = 128
+            num_layers = NUM_LAYERS
+            lstm_size = LSTM_SIZE
             num_classes = WH.vocab.vocab_size
             dropout_prob = 0.3
             out,state = RNN(gen_in,gen_init_state,num_layers,lstm_size,num_classes,dropout_prob)
-            return out
+            return out,state
 
         # DEFINE DISCRIMINATOR
         def discriminator(input_tensor):
@@ -183,19 +183,27 @@ with tf.device(DEVICE):
         with tf.variable_scope("generator") as scope:
             fake_data,fake_state = generator(x)
 
-        with tf.variable_scope("discriminator") as scope:
-            fake_prob,fake_logits = discriminator(fake_data)
-            scope.reuse_variables()
-            real_prob,real_logits = discriminator(y)
+        # with tf.variable_scope("discriminator") as scope:
+        #     fake_prob,fake_logits = discriminator(fake_data)
+        #     scope.reuse_variables()
+        #     real_prob,real_logits = discriminator(y)
 
         # Define loss function(s)
         with tf.name_scope('loss'):
-            discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
-            discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
-            discriminator_loss = discriminator_loss_real + discriminator_loss_fake
-            generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
-            tf.summary.scalar('discriminator_loss', discriminator_loss)
-            tf.summary.scalar('generator_loss', generator_loss)
+            #discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
+            #discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
+            #discriminator_loss = discriminator_loss_real + discriminator_loss_fake
+            #generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
+            #tf.summary.scalar('discriminator_loss', discriminator_loss)
+            #tf.summary.scalar('generator_loss', generator_loss)
+            with tf.variable_scope('softmax'):
+                W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
+                b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
+            logits = tf.reshape(
+                        tf.matmul(tf.reshape(fake_data, [-1, LSTM_SIZE]), W) + b,
+                        [-1,BATCH_SIZE, N_CLASSES])
+            pred = tf.nn.softmax(logits)
+            generator_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
 
         # Define optimizer
         with tf.name_scope('train'):
@@ -203,8 +211,15 @@ with tf.device(DEVICE):
             #   If we update the discriminator while optimizing the generator it will lose the ability to discriminate
             #   and our generator will no longer have an adversary.
             #   The same is true of the generator.
-            train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
-            train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
+            #train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
+            #train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
+            lr = tf.Variable(0.0, trainable=False)
+            tvars = tf.trainable_variables()
+            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
+            with tf.name_scope('optimizer'):
+                op = tf.train.AdamOptimizer(lr)
+            optimizer = op.apply_gradients(zip(grads, tvars))
+
 
         # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
         merged = tf.summary.merge_all()
@@ -234,7 +249,7 @@ with tf.device(DEVICE):
 
 
         # Training cycle
-        already_trained
+        already_trained = 0
         for epoch in range(already_trained,already_trained+MAX_STEPS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
