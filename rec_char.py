@@ -15,11 +15,12 @@ SAVE_DIR = "dict" # mtg
 CHECKPOINT_NAME = "dict_steps.ckpt" # "mtg_rec_char_steps.ckpt"
 DATA_NAME = "dictionary.json" # "cards_tokenized.txt"
 PICKLE_PATH = "dict_tokenized.pkl" #"mtg_tokenized_wh.pkl"
+SUBDIR_NAME = "dictionary"
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
 checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
-data_path = os.path.join(dir_path,"data",DATA_NAME)
+data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
 
 try:
@@ -61,7 +62,7 @@ args = {
     'n_classes':WH.vocab.vocab_size,
     'lstm_size':512,
     'num_layers':3, #2
-    'num_steps':250
+    'num_steps':50 #250
 }
 
 

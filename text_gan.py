@@ -136,8 +136,7 @@ with tf.device(DEVICE):
         def discriminator(input_tensor):
             # TODO
             # Implement discriminator
-            # The Discriminator's job is to not get fooled
-            # by the Generator.
+            # The Discriminator's job is to not get fooled by the Generator.
             # I'm not sure how it's going to do this.
             # It needs to take in a text sample (multiple words)
             # and reduce it down to a single classifier
