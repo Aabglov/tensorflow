@@ -61,8 +61,7 @@ with graph.as_default():
     batch_size = tf.shape(x)[0]
 
 
-     class DNI(object):
-
+     class DNI:
          def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,alpha = 0.1):
 
              self.weights = (np.random.randn(input_dim, output_dim) * 2) - 1
@@ -85,7 +84,7 @@ with graph.as_default():
 
              self.weights -= self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
              self.bias -= np.average(self.weight_synthetic_gradient,axis=0) * self.alpha
-             
+
              return self.weight_synthetic_gradient.dot(self.weights.T), self.output
 
          def update_synthetic_weights(self,true_gradient):
@@ -93,24 +92,6 @@ with graph.as_default():
              self.weights_0_1_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
              self.bias_0_1_synthetic_grads -= np.average(self.synthetic_gradient_delta,axis=0) * self.alpha
 
-    def convLayer(input_tensor, kernel_shape, channel_dim, strides, layer_name, dr=0.2, pool_size=3, act=leaky_relu):
-        with tf.variable_scope(layer_name) as scope:
-            # 2D Convolution
-            conv = tf.layers.conv2d(input_tensor,channel_dim,kernel_shape,strides=strides,padding='same',activation=None)
-            # Pooling
-            #pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[pool_size,pool_size], strides=pool_size)
-            # Psuedo down-sampling
-            #down = tf.layers.conv2d(conv, channel_dim, [pool_size,pool_size], (pool_size,pool_size), padding='valid', activation=None)
-            #norm = tf.layers.dropout(inputs=act_out, rate=dr)
-            norm = act(tf.layers.batch_normalization(conv,momentum=0.9,epsilon=1e-5,training=True),name=layer_name, alpha=0.1)
-            return norm
-
-    def deconvLayer(input_tensor, channels, deconv_kernel, deconv_strides, layer_name, conv_kernel=[3,3], conv_strides=(1,1), act=tf.nn.relu):
-        with tf.variable_scope(layer_name) as scope:
-            #conv =   tf.layers.conv2d(inputs=input_tensor,filters=channels,kernel_size=conv_kernel,strides=conv_strides,padding='same',activation=None)
-            deconv = tf.layers.conv2d_transpose(inputs=input_tensor,filters=channels,kernel_size=deconv_kernel,strides=deconv_strides,padding='same',activation=None)
-            norm = act(tf.layers.batch_normalization(deconv,momentum=0.9,epsilon=1e-5,training=True))
-            return norm
 
     # DEFINE GENERATOR USING DECONVOLUTION
     def generatorDeconv(gen_in):
