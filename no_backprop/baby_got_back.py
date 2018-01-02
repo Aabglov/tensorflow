@@ -46,8 +46,15 @@ class Layer(object):
         self.output = self.nonlin(self.input.dot(self.weights))
         return self.output
 
-    def backward(self,output_delta):
+    def backward(self,output_delta,debug=False):
         self.weight_output_delta = output_delta * self.nonlin_deriv(self.output)
+        #print(self.weight_output_delta[0][:5])
+        if debug:
+            print("")
+            print(np.min(self.output),np.max(self.output))
+            nonlin_deriv_output = self.nonlin_deriv(self.output)
+            print(np.min(nonlin_deriv_output),np.max(nonlin_deriv_output))
+            print(np.array_equal(self.nonlin_deriv(self.output),self.output))
         return self.weight_output_delta.dot(self.weights.T)
 
     def update(self):
@@ -61,8 +68,8 @@ iterations = 1000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
-batch_size = 10#00
-alpha = 0.1
+batch_size = 100#0
+alpha = 0.3
 
 input_dim = len(x[0])
 layer_1_dim = 128
@@ -87,7 +94,7 @@ for iter in range(iterations):
 
         layer_3_delta = layer_3_out - batch_y
 
-        layer_2_delta = layer_3.backward(layer_3_delta)
+        layer_2_delta = layer_3.backward(layer_3_delta,debug=False)
         layer_1_delta = layer_2.backward(layer_2_delta)
         layer_1.backward(layer_1_delta)
 
@@ -95,14 +102,16 @@ for iter in range(iterations):
         layer_2.update()
         layer_3.update()
 
-        error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
-        #error += np.sum(layer_3_delta ** 2.)
+        #error += (np.sum(np.abs(layer_3_delta * layer_3_out * (1 - layer_3_out))))
+        #error +=  np.sum(np.abs(layer_3_delta ** 2))
+        #ylna+(1−y)ln(1−a)]
+        error -= np.sum( (batch_y * np.log(layer_3_out)) + ((1.-batch_y) * np.log(1.-layer_3_out)) )
         #total += 1
 
     #error /= total
 
     if error < 1e-2:
-        print("\rIter:" + str(iter) + " Loss:" + str(error))
+        print("\rIter:" + str(iter) + " Loss:" + str(error/batch_size))
 
         pred_1_out = layer_1.forward(x[0].reshape((1,24)))
         pred_2_out = layer_2.forward(pred_1_out)
@@ -120,6 +129,19 @@ for iter in range(iterations):
         print("pred: {}".format(bin_pred))
         break
 
-    print("\rIter:" + str(iter) + " Loss:" + str(error))
+    print("\rIter:" + str(iter) + " Loss:" + str(error/batch_size))
     if(iter % 100 == 99):
         print("")
+
+
+batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
+batch_y = y[(batch_i * batch_size):(batch_i+1)*batch_size]
+layer_1_out = layer_1.forward(batch_x)
+layer_2_out = layer_2.forward(layer_1_out)
+layer_3_out = layer_3.forward(layer_2_out)
+
+print(batch_x[0])
+print(batch_y[0])
+for i in range(10):
+    print("")
+    print(layer_3_out[i])
