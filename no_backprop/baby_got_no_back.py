@@ -38,8 +38,10 @@ def sigmoid_out2deriv(out):
 
 class DNI(object):
 
-    def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,alpha = 0.1):
-
+    def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,name,alpha = 0.1):
+        self.name = name
+        self.input_dim = input_dim
+        self.output_dim = output_dim
         self.weights = (np.random.randn(input_dim, output_dim) * 2) - 1
         self.bias = (np.random.randn(output_dim) * 2) - 1
 
@@ -80,7 +82,10 @@ class DNI(object):
 
 class Layer(object):
 
-    def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,alpha):
+    def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,name,alpha):
+        self.name = name
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
         self.weights = (np.random.randn(input_dim, output_dim) * 0.2) - 0.1
         self.nonlin = nonlin
@@ -111,7 +116,7 @@ np.random.seed(1)
 
 num_examples = 1000
 output_dim = 12
-iterations = 100
+iterations = 10000
 
 x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
 
@@ -123,9 +128,9 @@ layer_1_dim = 128
 layer_2_dim = 64
 output_dim = len(y[0])
 
-layer_1 = DNI(input_dim,layer_1_dim,sigmoid,sigmoid_out2deriv,alpha)
-layer_2 = DNI(layer_1_dim,layer_2_dim,sigmoid,sigmoid_out2deriv,alpha)
-layer_3 = Layer(layer_2_dim, output_dim, sigmoid, sigmoid_out2deriv,alpha)
+layer_1 = DNI(input_dim,layer_1_dim,sigmoid,sigmoid_out2deriv,"layer_1",alpha)
+layer_2 = DNI(layer_1_dim,layer_2_dim,sigmoid,sigmoid_out2deriv,"layer_2",alpha)
+layer_3 = Layer(layer_2_dim, output_dim, sigmoid, sigmoid_out2deriv,"layer_3",alpha)
 
 for iter in range(iterations):
     error = 0
@@ -142,6 +147,7 @@ for iter in range(iterations):
         layer_3_out = layer_3.forward(layer_2_out)
         layer_3_delta = layer_3_out - batch_y
         layer_2_delta = layer_3.backward(layer_3_delta,debug=False)
+        layer_3.update()
 
         layer_2.update_synthetic_weights(layer_2_delta)
         layer_1.update_synthetic_weights(layer_1_delta)
@@ -158,15 +164,3 @@ for iter in range(iterations):
     print("\rIter:" + str(iter) + " Loss:" + str(error/batch_size))
     if(iter % 100 == 99):
         print("")
-
-
-batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
-batch_y = y[(batch_i * batch_size):(batch_i+1)*batch_size]
-_, layer_1_out = layer_1.forward_and_synthetic_update(batch_x,debug=False)
-layer_1_delta, layer_2_out = layer_2.forward_and_synthetic_update(layer_1_out)
-layer_2_delta, layer_3_out = layer_3.forward_and_synthetic_update(layer_2_out)
-
-print(batch_x[0])
-print(batch_y[0])
-for i in range(10):
-    print(layer_3_out[i])

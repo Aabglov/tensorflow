@@ -5,10 +5,29 @@ import numpy as np
 import random
 import tensorflow as tf
 import pickle
+import time
 
 # PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-checkpoint_path = os.path.join(dir_path,"saved","no_back")#,"mtg_rec_char_steps.ckpt")
+SAVE_DIR = "no_back"
+checkpoint_path = os.path.join(dir_path,SAVE_DIR)#,"mtg_rec_char_steps.ckpt")
+CHECKPOINT_NAME = "dict_steps.ckpt"
+LOG_DIR = os.path.join(dir_path,SAVE_DIR,"log")
+model_path = os.path.join(dir_path,SAVE_DIR,CHECKPOINT_NAME)
+
+num_examples = 10000
+NUM_EPOCHS = 10000
+LOG_EPOCH = 100
+
+batch_size = 1000
+alpha = 0.01#0.0001
+LEARNING_RATE = 0.001
+ADAM_BETA = 0.5
+
+layer_1_dim = 128
+layer_2_dim = 64
+output_dim = 12
+input_dim = int(2 * output_dim)
 
 def generate_dataset(output_dim = 8,num_examples=1000):
     def int2vec(x,dim=output_dim):
@@ -29,11 +48,10 @@ def generate_dataset(output_dim = 8,num_examples=1000):
     for i in range(len(y_int)):
         y.append(int2vec(y_int[i]))
 
-    x = np.array(x)
-    y = np.array(y)
+    x = np.array(x,dtype="float32")
+    y = np.array(y,dtype="float32")
 
     return (x,y)
-
 
 def variable_summaries(var):
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -47,31 +65,17 @@ def variable_summaries(var):
         tf.summary.scalar('min', tf.reduce_min(var))
         tf.summary.histogram('histogram', var)
 
-num_examples = 1000
-output_dim = 12
-iterations = 100
-
-x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
-
-batch_size = 100#0
-alpha = 0.01#0.0001
-
-input_dim = len(x[0])
-layer_1_dim = 128
-layer_2_dim = 64
-output_dim = len(y[0])
-
 graph = tf.Graph()
 with graph.as_default():
 
     # Placeholders
     with tf.name_scope("input"):
-        x = tf.placeholder(tf.int32, [None, input_dim], name='x')
-        y = tf.placeholder(tf.int32, [None, output_dim], name='y')
+        x_input = tf.placeholder(shape=[None, input_dim], dtype=tf.float32, name='x_input')
+        y_input = tf.placeholder(shape=[None, output_dim],dtype=tf.float32, name='y_input')
 
     # Get dynamic batch_size
     # Not sure this is actually needed
-    batch_size = tf.shape(x)[0]
+    #batch_size = tf.shape(x)[0]
 
     # We can't initialize these variables to 0 - the network will get stuck.
     def init_weight(shape):
@@ -103,7 +107,7 @@ with graph.as_default():
                         self.biases = init_bias([output_dim])
                         if self.summarize:
                             variable_summaries(self.biases)
-                with tf.name_scope('synthetic_gradient'):
+                with tf.name_scope('TRAINING_VARIABLES'):
                     with tf.name_scope('weights'):
                         self.var_weights_synthetic_grads = init_weight([output_dim, output_dim])
                         if self.summarize:
@@ -112,24 +116,24 @@ with graph.as_default():
                         self.var_bias_synthetic_grads = init_bias([output_dim])
                         if self.summarize:
                             variable_summaries(self.var_bias_synthetic_grads)
-                with tf.name_scope('activation'):
+                with tf.name_scope('activation_function'):
                     self.act = act
 
         def forward_and_synthetic_update(self,input_tensor):
             with tf.name_scope(self.name):
-                with tf.name_scope('preactivation'):
-                    self.preactivate = tf.matmul(input_tensor, self.weights) + self.biases
+                with tf.name_scope('pre_activation'):
+                    self.pre_activations = tf.matmul(input_tensor, self.weights) + self.biases
                     if self.summarize:
-                        tf.summary.histogram('pre_activations', self.preactivate)
+                        tf.summary.histogram('pre_activations', self.pre_activations)
                 with tf.name_scope('activation'):
-                    self.activations = self.act(self.preactivate, name='activation')
+                    self.activations = self.act(self.pre_activations)
                     if self.summarize:
                         tf.summary.histogram('activations', self.activations)
 
                 with tf.name_scope('synthetic_gradient'):
-                    self.synthetic_gradient = (self.activations.dot(self.var_weights_synthetic_grads) + self.var_bias_synthetic_grads)
-                    self.weight_synthetic_gradient = self.synthetic_gradient * tf.gradients(self.activations,self.pre_activations)
-                    self.synthetic_gradient_output = self.weight_synthetic_gradient.dot(self.weights.T)
+                    self.synthetic_gradient = tf.matmul(self.activations, self.var_weights_synthetic_grads) + self.var_bias_synthetic_grads
+                    self.weight_synthetic_gradient = self.synthetic_gradient * tf.gradients(self.activations,self.pre_activations)[0]
+                    self.synthetic_gradient_output = tf.matmul(self.weight_synthetic_gradient,tf.transpose(self.weights))
                     if self.summarize:
                         variable_summaries(self.synthetic_gradient)
                         variable_summaries(self.weight_synthetic_gradient)
@@ -137,57 +141,77 @@ with graph.as_default():
 
             return self.synthetic_gradient_output,self.activations
 
-        def update_synthetic_weights(self,true_gradient):
+
+    class NormalLayer:
+        def __init__(self,input_dim, output_dim, layer_name, act=tf.sigmoid, alpha=0.1, summarize=False):
+            self.name = layer_name
+            self.summarize = summarize
+            self.alpha = alpha
             with tf.name_scope(self.name):
-                with tf.name_scope('update'):
-                    with tf.name_scope('synthetic_gradient'):
-                        self.synthetic_gradient_delta = (self.synthetic_gradient - true_gradient)
-                        self.var_weights_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
-                        self.var_bias_synthetic_grads -= np.average(self.synthetic_gradient_delta,axis=0) * self.alpha
+                with tf.name_scope('TRAINING_VARIABLES'):
+                    # This Variable will hold the state of the weights for the layer
+                    with tf.name_scope('weights'):
+                        self.weights = init_weight([input_dim, output_dim])
+                        if self.summarize:
+                            variable_summaries(self.weights)
+                    with tf.name_scope('biases'):
+                        self.biases = init_bias([output_dim])
+                        if self.summarize:
+                            variable_summaries(self.biases)
+                with tf.name_scope('activation_function'):
+                    self.act = act
 
+        def forward(self,input_tensor):
+            with tf.name_scope(self.name):
+                with tf.name_scope('pre_activation'):
+                    self.pre_activations = tf.matmul(input_tensor, self.weights) + self.biases
+                    if self.summarize:
+                        tf.summary.histogram('pre_activations', self.pre_activations)
+                with tf.name_scope('activation'):
+                    self.activations = self.act(self.pre_activations)
+                    if self.summarize:
+                        tf.summary.histogram('activations', self.activations)
 
-    # Create model
-    def layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
-        # Adding a name scope ensures logical grouping of the layers in the graph.
-        with tf.name_scope(layer_name):
-            # This Variable will hold the state of the weights for the layer
-            with tf.name_scope('weights'):
-                weights = init_weight([input_dim, output_dim])
-                variable_summaries(weights)
-            with tf.name_scope('biases'):
-                biases = init_bias([output_dim])
-                variable_summaries(biases)
-            with tf.name_scope('Wx_plus_b'):
-                preactivate = tf.matmul(input_tensor, weights) + biases
-                tf.summary.histogram('pre_activations', preactivate)
-            activations = act(preactivate, name='activation')
-            tf.summary.histogram('activations', activations)
-            return activations
+            return self.activations
 
-    # Define loss function(s)
-    with tf.name_scope('loss'):
-        discriminator_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits, labels=tf.ones_like(real_prob)))
-        discriminator_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.zeros_like(fake_prob)))
-        discriminator_loss = discriminator_loss_real + discriminator_loss_fake
-        generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits, labels=tf.ones_like(fake_prob)))
-        #discriminator_loss = -tf.reduce_mean(tf.log(real_prob) + tf.log(1. - fake_prob))
-        #generator_loss = -tf.reduce_mean(tf.log(fake_prob))
-        tf.summary.scalar('discriminator_loss', discriminator_loss)
-        tf.summary.scalar('generator_loss', generator_loss)
+    # Model
+    with tf.name_scope("model"):
+        layer_1 = DNI(input_dim, layer_1_dim, "dni_1", act=tf.sigmoid, alpha=0.01, summarize=True)
+        layer_2 = DNI(layer_1_dim, layer_2_dim, "dni_2", act=tf.sigmoid, alpha=0.01, summarize=True)
+        layer_3 = NormalLayer(layer_2_dim, output_dim, "layer_3", act=tf.sigmoid, alpha=0.01, summarize=True)
 
-    # Define optimizer
+    # Forward Pass
+    with tf.name_scope("forward"):
+        _, layer_1_out = layer_1.forward_and_synthetic_update(x_input)
+        layer_1_delta, layer_2_out = layer_2.forward_and_synthetic_update(layer_1_out)
+        # Normal update
+        layer_3_out = layer_3.forward(layer_2_out)
+
+    # Loss
+    with tf.name_scope("loss"):
+        #layer_3_delta = (layer_3_out - y_input
+        #loss = tf.reduce_sum(layer_3_delta)
+        loss = tf.losses.mean_squared_error(y_input,layer_3_out)
+        tf.summary.scalar('loss', loss)
+
+    # Backward Propagation
     with tf.name_scope('train'):
-        # Only update the variables associated with each network
-        #   If we update the discriminator while optimizing the generator it will lose the ability to discriminate
-        #   and our generator will no longer have an adversary.
-        #   The same is true of the generator.
-        train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
-        train_g_step = tf.train.AdamOptimizer(GEN_LEARNING_RATE,beta1=ADAM_BETA).minimize(generator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='generator'))
+        #layer_2_delta = layer_3.backward(layer_3_delta)
+        #layer_3_updated = layer_3.update(layer_2_out)
+        #layer_2_updated = layer_2.update_synthetic_weights(layer_2_delta)
+        #layer_1_updated = layer_1.update_synthetic_weights(layer_1_delta)
+        # .*\/synthetic\/.*
+        collection = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='.*\/TRAINING_VARIABLES\/.*')#[]
+        #for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='.*\/TRAINING_VARIABLES\/.*')
+        #    if "synthetic_gradient" in var.name_scope:
+        #        print(var)
+        #        collection.append(var)
+        #print(len(collection))
+        train_step = tf.train.AdamOptimizer(LEARNING_RATE,beta1=ADAM_BETA).minimize(loss,var_list=collection)
 
     # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
-    #test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'test'))
 
     # Initializing the variables
     init = tf.global_variables_initializer()
@@ -195,3 +219,46 @@ with graph.as_default():
 
     # 'Saver' op to save and restore all the variables
     saver = tf.train.Saver()
+
+
+print("Beginning Session")
+x,y = generate_dataset(num_examples=num_examples, output_dim = output_dim)
+
+#Running first session
+with tf.Session(graph=graph) as sess:
+    # Initialize variables
+    #sess.run(init)
+    sess.run(tf.global_variables_initializer())
+
+    try:
+        ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+        saver.restore(sess, ckpt.model_checkpoint_path)
+        print("Model restored from file: %s" % model_path)
+    except Exception as e:
+        print("Model restore failed {}".format(e))
+
+    # Training cycle
+    already_trained = 0
+    for epoch in range(already_trained,NUM_EPOCHS):
+        for batch_i in range(int(num_examples / batch_size)):
+            batch_x = x[(batch_i * batch_size):(batch_i+1)*batch_size]
+            batch_y = y[(batch_i * batch_size):(batch_i+1)*batch_size]
+
+            start = time.time()
+
+            # Run optimization op (backprop) and cost op (to get loss value)
+            summary,cost,_ = sess.run([merged,loss,train_step], feed_dict={x_input: batch_x, y_input: batch_y})
+            avg_cost = cost/batch_size
+            end = time.time()
+            train_writer.add_summary(summary, epoch)
+            print("Epoch:", '{}'.format(epoch), "cost=" , "{}".format(avg_cost), "time:", "{}".format(end-start))
+
+        # Display logs per epoch step
+        if epoch % LOG_EPOCH == 0:
+            #train_writer.add_run_metadata(run_metadata, "step_{}".format(epoch))
+            print("saving {}".format(epoch)) # Spacer
+            save_path = saver.save(sess, model_path, global_step = epoch)
+
+    # Save model weights to disk
+    save_path = saver.save(sess, model_path)
+    print("Model saved in file: %s" % save_path)
