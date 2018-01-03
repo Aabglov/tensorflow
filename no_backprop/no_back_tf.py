@@ -4,8 +4,6 @@ import os
 import numpy as np
 import random
 import tensorflow as tf
-import os
-import word_helpers
 import pickle
 
 # PATHS -- absolute
@@ -37,6 +35,18 @@ def generate_dataset(output_dim = 8,num_examples=1000):
     return (x,y)
 
 
+def variable_summaries(var):
+    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+    with tf.name_scope('summaries'):
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar('mean', mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.summary.scalar('stddev', stddev)
+        tf.summary.scalar('max', tf.reduce_max(var))
+        tf.summary.scalar('min', tf.reduce_min(var))
+        tf.summary.histogram('histogram', var)
+
 num_examples = 1000
 output_dim = 12
 iterations = 100
@@ -53,91 +63,106 @@ output_dim = len(y[0])
 
 graph = tf.Graph()
 with graph.as_default():
+
     # Placeholders
-    x = tf.placeholder(tf.int32, [None, input_dim], name='input_placeholder')
-    y = tf.placeholder(tf.int32, [None, output_dim], name='labels_placeholder')
+    with tf.name_scope("input"):
+        x = tf.placeholder(tf.int32, [None, input_dim], name='x')
+        y = tf.placeholder(tf.int32, [None, output_dim], name='y')
 
     # Get dynamic batch_size
+    # Not sure this is actually needed
     batch_size = tf.shape(x)[0]
 
+    # We can't initialize these variables to 0 - the network will get stuck.
+    def init_weight(shape):
+        """Create a weight variable with appropriate initialization."""
+        initial = tf.truncated_normal(shape, stddev=0.1)
+        #return tf.get_variable(shape=shape,initializer=tf.truncated_normal_initializer(stddev=0.1))
+        return tf.Variable(initial)
 
-     class DNI:
-         def __init__(self,input_dim, output_dim,nonlin,nonlin_deriv,alpha = 0.1):
-
-             self.weights = (np.random.randn(input_dim, output_dim) * 2) - 1
-             self.bias = (np.random.randn(output_dim) * 2) - 1
-
-             self.weights_0_1_synthetic_grads = (np.random.randn(output_dim,output_dim) * .0) - .0
-             self.bias_0_1_synthetic_grads = (np.random.randn(output_dim) * .0) - .0
-
-             self.nonlin = nonlin
-             self.nonlin_deriv = nonlin_deriv
-             self.alpha = alpha
-
-         def forward_and_synthetic_update(self,input):
-
-             self.input = input
-             self.output = self.nonlin(self.input.dot(self.weights)  + self.bias)
-
-             self.synthetic_gradient = (self.output.dot(self.weights_0_1_synthetic_grads) + self.bias_0_1_synthetic_grads)
-             self.weight_synthetic_gradient = self.synthetic_gradient * self.nonlin_deriv(self.output)
-
-             self.weights -= self.input.T.dot(self.weight_synthetic_gradient) * self.alpha
-             self.bias -= np.average(self.weight_synthetic_gradient,axis=0) * self.alpha
-
-             return self.weight_synthetic_gradient.dot(self.weights.T), self.output
-
-         def update_synthetic_weights(self,true_gradient):
-             self.synthetic_gradient_delta = (self.synthetic_gradient - true_gradient)
-             self.weights_0_1_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
-             self.bias_0_1_synthetic_grads -= np.average(self.synthetic_gradient_delta,axis=0) * self.alpha
+    def init_bias(shape):
+        """Create a bias variable with appropriate initialization."""
+        initial = tf.constant(0.1, shape=shape)
+        # return  tf.get_variable(shape=shape, initializer=tf.constant_initializer(0.1))
+        return tf.Variable(initial)
 
 
-    # DEFINE GENERATOR USING DECONVOLUTION
-    def generatorDeconv(gen_in):
-        linear = tf.layers.dense(inputs=gen_in, units=GEN_IN_X*GEN_IN_Y*GEN_CHANNELS, activation=tf.nn.relu)
-        shaped_in = tf.reshape(linear,[-1,GEN_IN_X,GEN_IN_Y,GEN_CHANNELS])
-        deconv1 = deconvLayer(input_tensor=shaped_in ,channels=GEN_SIZE_1,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv1")
-        deconv2 = deconvLayer(input_tensor=deconv1,channels=GEN_SIZE_2,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv2")
-        deconv3 = deconvLayer(input_tensor=deconv2,channels=GEN_SIZE_3,deconv_kernel=GEN_KERNEL,deconv_strides=GEN_STRIDES,layer_name="deconv3")
-        #deconv4 = deconvLayer(input_tensor=deconv3,channels=GEN_SIZE_4,deconv_kernel=GEN_KERNEL,deconv_strides=(2,2),conv_kernel=CONV_KERNEL,conv_strides=(2,2),layer_name="deconv4")
-        deconv_out = tf.layers.conv2d_transpose(inputs=deconv3,filters=NUM_CHANNELS,kernel_size=GEN_KERNEL,strides=GEN_STRIDES,padding='same',activation=tf.nn.tanh)
-        #flat = tf.contrib.layers.flatten(deconv_out)
-        #dense = tf.layers.dense(inputs=flat, units=IMG_SIZE1*IMG_SIZE2*NUM_CHANNELS, activation=tf.nn.relu)
-        image_shaped_gen= tf.reshape(deconv_out,[-1,IMG_SIZE1, IMG_SIZE2, NUM_CHANNELS])
-        tf.summary.image('generated_input', image_shaped_gen, 4)
-        #return gen2
-        return image_shaped_gen
+    class DNI:
+        def __init__(self,input_dim, output_dim, layer_name, act=tf.sigmoid, alpha=0.1, summarize=False):
+            self.name = layer_name
+            self.summarize = summarize
+            self.alpha = alpha
+            with tf.name_scope(self.name):
+                with tf.name_scope('forward'):
+                    # This Variable will hold the state of the weights for the layer
+                    with tf.name_scope('weights'):
+                        self.weights = init_weight([input_dim, output_dim])
+                        if self.summarize:
+                            variable_summaries(self.weights)
+                    with tf.name_scope('biases'):
+                        self.biases = init_bias([output_dim])
+                        if self.summarize:
+                            variable_summaries(self.biases)
+                with tf.name_scope('synthetic_gradient'):
+                    with tf.name_scope('weights'):
+                        self.var_weights_synthetic_grads = init_weight([output_dim, output_dim])
+                        if self.summarize:
+                            variable_summaries(self.var_weights_synthetic_grads)
+                    with tf.name_scope('biases'):
+                        self.var_bias_synthetic_grads = init_bias([output_dim])
+                        if self.summarize:
+                            variable_summaries(self.var_bias_synthetic_grads)
+                with tf.name_scope('activation'):
+                    self.act = act
 
-    # DEFINE DISCRIMINATOR
-    def discriminatorConv(input_tensor):
-        #hidden1 =    convLayer(input_tensor, DISC_KERNEL,  HIDDEN_SIZE_1, 'layer1')
-        # Don't apply batch normalization to input layer
-        with tf.variable_scope("layer1") as scope:
-            hidden1 = tf.layers.conv2d(input_tensor,HIDDEN_SIZE_1,DISC_KERNEL,strides=(2,2),padding='same',activation=tf.nn.relu)
-        hidden2 =    convLayer(hidden1,      DISC_KERNEL,  HIDDEN_SIZE_2, (2,2), 'layer2')
-        hidden3 =    convLayer(hidden2,      DISC_KERNEL,  HIDDEN_SIZE_3, (2,2), 'layer3')
-        hidden_out = convLayer(hidden3,      DISC_KERNEL,  HIDDEN_SIZE_4, (2,2), 'layer_out')
-        # Dense Layer
-        with tf.variable_scope("dense") as scope:
-            flat = tf.contrib.layers.flatten(hidden_out)
-            #dense = tf.layers.dense(inputs=flat, units=HIDDEN_SIZE_4, activation=tf.nn.relu)
-            # Logits Layer
-            #dropout = tf.layers.dropout(inputs=dense, rate=0.2)
-            logits = tf.layers.dense(inputs=flat, units=1)
-        prob = tf.nn.sigmoid(logits)
-        return prob, logits
+        def forward_and_synthetic_update(self,input_tensor):
+            with tf.name_scope(self.name):
+                with tf.name_scope('preactivation'):
+                    self.preactivate = tf.matmul(input_tensor, self.weights) + self.biases
+                    if self.summarize:
+                        tf.summary.histogram('pre_activations', self.preactivate)
+                with tf.name_scope('activation'):
+                    self.activations = self.act(self.preactivate, name='activation')
+                    if self.summarize:
+                        tf.summary.histogram('activations', self.activations)
+
+                with tf.name_scope('synthetic_gradient'):
+                    self.synthetic_gradient = (self.activations.dot(self.var_weights_synthetic_grads) + self.var_bias_synthetic_grads)
+                    self.weight_synthetic_gradient = self.synthetic_gradient * tf.gradients(self.activations,self.pre_activations)
+                    self.synthetic_gradient_output = self.weight_synthetic_gradient.dot(self.weights.T)
+                    if self.summarize:
+                        variable_summaries(self.synthetic_gradient)
+                        variable_summaries(self.weight_synthetic_gradient)
+                        variable_summaries(self.synthetic_gradient_output)
+
+            return self.synthetic_gradient_output,self.activations
+
+        def update_synthetic_weights(self,true_gradient):
+            with tf.name_scope(self.name):
+                with tf.name_scope('update'):
+                    with tf.name_scope('synthetic_gradient'):
+                        self.synthetic_gradient_delta = (self.synthetic_gradient - true_gradient)
+                        self.var_weights_synthetic_grads -= self.output.T.dot(self.synthetic_gradient_delta) * self.alpha
+                        self.var_bias_synthetic_grads -= np.average(self.synthetic_gradient_delta,axis=0) * self.alpha
 
 
-    with tf.variable_scope("generator") as scope:
-        fake_data = generatorDeconv(g_shaped)
-
-    with tf.variable_scope("discriminator") as scope:
-        fake_prob,fake_logits = discriminatorConv(fake_data)
-        #fake_prob = discriminator(fake_data)
-        scope.reuse_variables()
-        real_prob,real_logits = discriminatorConv(image_shaped_input)
-        #real_prob = discriminator(x)
+    # Create model
+    def layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+        # Adding a name scope ensures logical grouping of the layers in the graph.
+        with tf.name_scope(layer_name):
+            # This Variable will hold the state of the weights for the layer
+            with tf.name_scope('weights'):
+                weights = init_weight([input_dim, output_dim])
+                variable_summaries(weights)
+            with tf.name_scope('biases'):
+                biases = init_bias([output_dim])
+                variable_summaries(biases)
+            with tf.name_scope('Wx_plus_b'):
+                preactivate = tf.matmul(input_tensor, weights) + biases
+                tf.summary.histogram('pre_activations', preactivate)
+            activations = act(preactivate, name='activation')
+            tf.summary.histogram('activations', activations)
+            return activations
 
     # Define loss function(s)
     with tf.name_scope('loss'):
