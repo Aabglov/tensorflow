@@ -11,10 +11,21 @@ import time
 import caffeine
 
 # PATHS -- absolute
-SAVE_DIR = "dict" # mtg
-CHECKPOINT_NAME = "dict_steps.ckpt" # "mtg_rec_char_steps.ckpt"
-DATA_NAME = "dictionary.json" # "cards_tokenized.txt"
-PICKLE_PATH = "dict_tokenized.pkl" #"mtg_tokenized_wh.pkl"
+# SAVE_DIR = "dict" # mtg
+# CHECKPOINT_NAME = "dict_steps.ckpt" # "mtg_rec_char_steps.ckpt"
+# DATA_NAME = "dictionary.json" # "cards_tokenized.txt"
+# PICKLE_PATH = "dict_tokenized.pkl" #"mtg_tokenized_wh.pkl"
+# SUBDIR_NAME = "dictionary"
+#
+# dir_path = os.path.dirname(os.path.realpath(__file__))
+# model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
+# checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
+# data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
+
+SAVE_DIR = "mtg"
+CHECKPOINT_NAME = "mtg_rec_char_steps.ckpt"
+DATA_NAME = "cards_tokenized.txt"
+PICKLE_PATH = "mtg_tokenized_wh.pkl"
 SUBDIR_NAME = "dictionary"
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
