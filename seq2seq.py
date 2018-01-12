@@ -11,8 +11,8 @@ import dialog_parser
 
 # PATHS
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-SAVE_PATH = os.path.join(DIR_PATH,"saved","text","model.ckpt")
-CHKPT_PATH = os.path.join(DIR_PATH,"saved","text")
+SAVE_PATH = os.path.join(DIR_PATH,"saved","dialog","model.ckpt")
+CHKPT_PATH = os.path.join(DIR_PATH,"saved","dialog")
 LOG_DIR = "/tmp/tensorflow/log"
 #DATA_PATH = os.path.join(DIR_PATH,"data","cards_tokenized.txt")
 LOAD_PATH = os.path.join(DIR_PATH,"data","dialog")
@@ -29,9 +29,9 @@ DECAY_RATE = 1.0
 ADAM_BETA = 0.5
 GRAD_CLIP = 5.0
 
-BATCH_SIZE = 64
-MAX_STEPS = 40000
-LOG_FREQUENCY = 100
+BATCH_SIZE = 100#64
+MAX_STEPS = 1000
+LOG_FREQUENCY = 10
 # max length of 100 excludes about 1200 of 300k samples.
 # max length of 200 excludes about 100 of 300k
 MAX_SEQ_LEN = 50
@@ -269,28 +269,28 @@ with tf.Session(graph=graph) as sess:#,config=tf.ConfigProto(log_device_placemen
             first_pred_output = predicted_output[0]
             pred_letters = []
             for p in first_pred_output:
-                #pred_letter = np.random.choice(vocab, 1, p=p)[0]
-                pred_letter = reverse_vocab_lookup[np.argmax(p)]
+                pred_letter = np.random.choice(vocab, 1, p=p)[0]
+                #pred_letter = reverse_vocab_lookup[np.argmax(p)]
                 pred_letters.append(pred_letter)
             sample = ' '.join(pred_letters)
-            print('cost: ', c, 'pred: ',sample)
+            print('iteration',i,'of',NUM_SAMPLES//BATCH_SIZE,'cost: ', c, 'pred: ',sample)
 
 
-        # Display logs per epoch step
-        if epoch % LOG_FREQUENCY == 0:
-            #   I'm not a billion percent sure what this does....
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
-            fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
-            summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
-                                  feed_dict=fd,
-                                  options=run_options,
-                                  run_metadata=run_metadata)
-            train_writer.add_run_metadata(run_metadata, "step_{}".format(epoch))
-            train_writer.add_summary(summary, epoch)
-            print('Adding run metadata for', epoch)
-            save_path = saver.save(sess, SAVE_PATH, global_step = epoch)
-            print('Step %s' % epoch)
+            # Display logs per epoch step
+            if i % LOG_FREQUENCY == 0:
+                #   I'm not a billion percent sure what this does....
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
+                summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
+                                      feed_dict=fd,
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, "step_{}".format(i))
+                train_writer.add_summary(summary, epoch)
+                print('Adding run metadata for', epoch)
+                save_path = saver.save(sess, SAVE_PATH, global_step = i)
+                print('Step %s' % epoch)
 
     # Cleanup
     #   Finish off the filename queue coordinator.
