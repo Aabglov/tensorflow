@@ -173,22 +173,27 @@ with tf.device('/cpu:0'):
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-            # Generate a batch
-            batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
-            # Reset state value
-            state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-            for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-                start = time.time()
-                #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
-                batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-                #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
-                batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
-                # Run optimization op (backprop) and cost op (to get loss value)
-                _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
-                state = s
-                end = time.time()
-                avg_cost = (c/BATCH_SIZE)/NUM_STEPS
-                print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
+
+            start = time.time()
+            sum_cost = 0
+            for _batch in range(WH.TrainBatches.num_batches):
+                # Generate a batch
+                print("     batch {} of {} processed".format(_batch,WH.TrainBatches.num_batches))
+                batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
+                # Reset state value
+                state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+                for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
+                    #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
+                    batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                    #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
+                    batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                    # Run optimization op (backprop) and cost op (to get loss value)
+                    _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
+                    state = s
+                    sum_cost += c
+            end = time.time()
+            avg_cost = (sum_cost/BATCH_SIZE)/WH.TrainBatches.num_batches
+            print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
             # Display logs per epoch step
             if epoch % DISPLAY_STEP == 0:
