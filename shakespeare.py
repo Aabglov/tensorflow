@@ -151,7 +151,7 @@ with tf.device('/cpu:0'):
     BATCH_SIZE = 10 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
     DISPLAY_STEP = 10
-    DECAY_RATE = 1.0
+    DECAY_RATE = 0.95#1.0
     DROPOUT_KEEP_PROB = 0.5
 
 
