@@ -159,7 +159,7 @@ with tf.device('/cpu:0'):
     BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
     DISPLAY_STEP = 100
-    SAVE_STEP = 1000
+    SAVE_STEP = 10
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
 
@@ -239,14 +239,12 @@ with tf.device('/cpu:0'):
                     print("TRUE: {}".format(''.join(true)))
                     print(" ") # Spacer
 
-                if _batch % SAVE_STEP == 0 and _batch != 0:
-                    save_path = saver.save(sess, model_path, global_step = (epoch * num_batches)+_batch)
-
             end = time.time()
             avg_cost = (sum_cost/BATCH_SIZE)/num_batches
             print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
-
+            if epoch % SAVE_STEP == 0 and epoch != 0:
+                save_path = saver.save(sess, model_path, global_step = epoch)
 
         # Save model weights to disk
         save_path = saver.save(sess, model_path)
