@@ -124,9 +124,15 @@ with tf.device('/cpu:0'):
 
 
         #Predictions, loss, training step
-        with tf.variable_scope("dense") as scope:
-            logits = tf.layers.dense(inputs=rnn_outputs, units=N_CLASSES)
-
+        # with tf.variable_scope("dense") as scope:
+        #     logits = tf.layers.dense(inputs=rnn_outputs, units=N_CLASSES)
+        # pred = tf.nn.softmax(logits)
+        with tf.variable_scope('softmax'):
+            W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
+            b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
+        logits = tf.reshape(
+                    tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
+                    [-1,batch_size, N_CLASSES])
         pred = tf.nn.softmax(logits)
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
