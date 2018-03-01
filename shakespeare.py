@@ -212,8 +212,8 @@ with tf.device('/cpu:0'):
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
-                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                            pred_letter = WH.vocab.vocab[np.argmax(j[0])]
+                            pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            #pred_letter = WH.vocab.vocab[np.argmax(j[0])]
                             preds.append(pred_letter)
                         for l in range(batch_y.shape[1]):
                             true.append(WH.vocab.id2char(batch_y[0][l]))
