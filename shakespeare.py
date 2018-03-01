@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':1e-3,#3e-4,
+    'learning_rate':3e-4,
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -150,8 +150,8 @@ with tf.device('/cpu:0'):
     #  TRAINING Parameters
     BATCH_SIZE = 10 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
-    DISPLAY_STEP = 10
-    SAVE_STEP = 100
+    DISPLAY_STEP = 100
+    SAVE_STEP = 10000
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
 
