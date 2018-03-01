@@ -156,10 +156,10 @@ with tf.device('/cpu:0'):
 
     print("Beginning Session")
     #  TRAINING Parameters
-    BATCH_SIZE = 10 # Feeding a single character across multiple batches at a time
+    BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
     DISPLAY_STEP = 100
-    SAVE_STEP = 10000
+    SAVE_STEP = 1000
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
 
@@ -172,7 +172,15 @@ with tf.device('/cpu:0'):
 
         try:
             ckpt = tf.train.get_checkpoint_state(checkpoint_path)
-            saver.restore(sess, ckpt.model_checkpoint_path)
+            # A quirk of training on a different machine:
+            # the model_checkpoint_path is an absolute path and
+            # makes restoring fail because it doesn't match the path here.
+            # To avoid this, we extract the checkpoint file name
+            # then recreate the correct path and restore from there.
+            restore_path = ckpt.model_checkpoint_path
+            restore_file = os.path.basename(restore_path)
+            new_path = os.path.join(dir_path,"saved",SAVE_DIR,restore_file)
+            saver.restore(sess, new_path)#ckpt.model_checkpoint_path)
             print("Model restored from file: %s" % model_path)
         except Exception as e:
             print("Model restore failed {}".format(e))
