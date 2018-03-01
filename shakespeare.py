@@ -126,7 +126,8 @@ with tf.device('/cpu:0'):
         #Predictions, loss, training step
         with tf.variable_scope("dense") as scope:
             flat = tf.reshape(rnn_outputs, [-1, LSTM_SIZE])
-            logits = tf.layers.dense(inputs=flat, units=N_CLASSES)
+            dense = tf.layers.dense(inputs=flat, units=N_CLASSES)
+            logits = tf.reshape(dense,[-1,batch_size, N_CLASSES])
         pred = tf.nn.softmax(logits)
         # with tf.variable_scope('softmax'):
         #     W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
