@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':3e-4,
+    'learning_rate':1e-3,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
