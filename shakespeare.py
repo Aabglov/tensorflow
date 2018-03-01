@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':1e-4,#3e-4
+    'learning_rate':3e-4,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -193,9 +193,10 @@ with tf.device('/cpu:0'):
 
             start = time.time()
             sum_cost = 0
-            for _batch in range(WH.TrainBatches.num_batches // BATCH_SIZE):
+            num_batches = WH.TrainBatches.num_batches // BATCH_SIZE
+            for _batch in range(num_batches):
                 # Generate a batch
-                print("     batch {} of {} processed, epoch {}".format(_batch,WH.TrainBatches.num_batches, epoch))
+                print("     batch {} of {} processed, epoch {}".format(_batch,num_batches, epoch))
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
@@ -239,10 +240,10 @@ with tf.device('/cpu:0'):
                     print(" ") # Spacer
 
                 if _batch % SAVE_STEP == 0 and _batch != 0:
-                    save_path = saver.save(sess, model_path, global_step = (epoch * WH.TrainBatches.num_batches)+_batch)
+                    save_path = saver.save(sess, model_path, global_step = (epoch * num_batches)+_batch)
 
             end = time.time()
-            avg_cost = (sum_cost/BATCH_SIZE)/WH.TrainBatches.num_batches
+            avg_cost = (sum_cost/BATCH_SIZE)/num_batches
             print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
 
