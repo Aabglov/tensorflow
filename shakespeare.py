@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':2e-3,#3e-4,
+    'learning_rate':1e-3,#3e-4,
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -150,8 +150,9 @@ with tf.device('/cpu:0'):
     #  TRAINING Parameters
     BATCH_SIZE = 10 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
-    DISPLAY_STEP = 1
-    DECAY_RATE = 0.95#1.0
+    DISPLAY_STEP = 10
+    SAVE_STEP = 100
+    DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
 
 
@@ -178,7 +179,7 @@ with tf.device('/cpu:0'):
             sum_cost = 0
             for _batch in range(WH.TrainBatches.num_batches):
                 # Generate a batch
-                print("     batch {} of {} processed".format(_batch,WH.TrainBatches.num_batches))
+                print("     batch {} of {} processed, epoch {}".format(_batch,WH.TrainBatches.num_batches, epoch))
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
@@ -191,39 +192,44 @@ with tf.device('/cpu:0'):
                     _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
                     state = s
                     sum_cost += c
+
+                # Display logs per epoch step
+                if _batch % DISPLAY_STEP == 0:
+                    # Test model
+                    preds = []
+                    true = []
+
+                    # We no longer use BATCH_SIZE here because
+                    # in the test method we only want to compare
+                    # one card output to one card prediction
+                    test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
+                    state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+                    # We iterate over every pair of letters in our test batch
+                    for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
+                        batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
+                        batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
+                        s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+                        state = s
+                        # Choose a letter from our vocabulary based on our output probability: p
+                        for j in p:
+                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            pred_letter = WH.vocab.vocab[np.argmax(j[0])]
+                            preds.append(pred_letter)
+                        for l in range(batch_y.shape[1]):
+                            true.append(WH.vocab.id2char(batch_y[0][l]))
+                    print(" ") # Spacer
+                    print("PRED: {}".format(''.join(preds)))
+                    print("TRUE: {}".format(''.join(true)))
+                    print(" ") # Spacer
+
+                if _batch % SAVE_STEP == 0 and _batch != 0:
+                    save_path = saver.save(sess, model_path, global_step = (epoch * WH.TrainBatches.num_batches)+_batch)
+
             end = time.time()
             avg_cost = (sum_cost/BATCH_SIZE)/WH.TrainBatches.num_batches
             print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
-            # Display logs per epoch step
-            if epoch % DISPLAY_STEP == 0:
-                # Test model
-                preds = []
-                true = []
 
-                # We no longer use BATCH_SIZE here because
-                # in the test method we only want to compare
-                # one card output to one card prediction
-                test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
-                state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-                # We iterate over every pair of letters in our test batch
-                for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-                    batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                    batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
-                    s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
-                    state = s
-                    # Choose a letter from our vocabulary based on our output probability: p
-                    for j in p:
-                        #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                        pred_letter = WH.vocab.vocab[np.argmax(j[0])]
-                        preds.append(pred_letter)
-                    for l in range(batch_y.shape[1]):
-                        true.append(WH.vocab.id2char(batch_y[0][l]))
-                print(" ") # Spacer
-                print("PRED: {}".format(''.join(preds)))
-                print("TRUE: {}".format(''.join(true)))
-                print(" ") # Spacer
-                save_path = saver.save(sess, model_path, global_step = epoch)
 
         # Save model weights to disk
         save_path = saver.save(sess, model_path)
