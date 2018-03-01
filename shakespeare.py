@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':1e-3,#3e-4
+    'learning_rate':1e-4,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -193,7 +193,7 @@ with tf.device('/cpu:0'):
 
             start = time.time()
             sum_cost = 0
-            for _batch in range(WH.TrainBatches.num_batches):
+            for _batch in range(WH.TrainBatches.num_batches // BATCH_SIZE):
                 # Generate a batch
                 print("     batch {} of {} processed, epoch {}".format(_batch,WH.TrainBatches.num_batches, epoch))
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
