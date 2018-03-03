@@ -75,6 +75,7 @@ LSTM_SIZE = args['lstm_size']
 NUM_LAYERS = args['num_layers']
 NUM_STEPS = args['num_steps']
 
+
 with tf.device('/cpu:0'):
     graph = tf.Graph()
     with graph.as_default():
@@ -122,20 +123,16 @@ with tf.device('/cpu:0'):
         #                                              initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
         #
 
+        temp = tf.Variable(0.0, trainable=False)
 
         #Predictions, loss, training step
         with tf.variable_scope("dense") as scope:
             flat = tf.reshape(rnn_outputs, [-1, LSTM_SIZE])
             dense = tf.layers.dense(inputs=flat, units=N_CLASSES)
             logits = tf.reshape(dense,[-1,batch_size, N_CLASSES])
-        pred = tf.nn.softmax(logits)
-        # with tf.variable_scope('softmax'):
-        #     W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
-        #     b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
-        # logits = tf.reshape(
-        #             tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
-        #             [-1,batch_size, N_CLASSES])
-        # pred = tf.nn.softmax(logits)
+        #pred = tf.nn.softmax(logits)
+        pred = tf.nn.softmax(tf.div(logits,temp))
+
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
         cost = tf.reduce_sum(losses)
@@ -162,6 +159,7 @@ with tf.device('/cpu:0'):
     SAVE_STEP = 10
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
+    TEMPERATURE = 0.8
 
 
     #Running first session
@@ -190,6 +188,7 @@ with tf.device('/cpu:0'):
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            sess.run(tf.assign(temp,TEMPERATURE))
 
             start = time.time()
             sum_cost = 0
