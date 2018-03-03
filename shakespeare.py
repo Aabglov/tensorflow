@@ -123,7 +123,7 @@ with tf.device('/cpu:0'):
         #                                              initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
         #
 
-        temp = tf.Variable(0.0, trainable=False)
+        temp = tf.placeholder(tf.float32)
 
         #Predictions, loss, training step
         with tf.variable_scope("dense") as scope:
@@ -188,7 +188,6 @@ with tf.device('/cpu:0'):
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-            sess.run(tf.assign(temp,TEMPERATURE))
 
             start = time.time()
             sum_cost = 0
@@ -205,7 +204,11 @@ with tf.device('/cpu:0'):
                     #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
                     batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
                     # Run optimization op (backprop) and cost op (to get loss value)
-                    _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
+                    _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
+                                                                                  y: batch_y,
+                                                                                  init_state: state,
+                                                                                  dropout_prob: DROPOUT_KEEP_PROB,
+                                                                                  temp:1.0})
                     state = s
                     sum_cost += c
 
@@ -226,7 +229,11 @@ with tf.device('/cpu:0'):
                     for i in range(0,50): # Iterate by NUM_STEPS
                         #batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
                         #batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
-                        s,p = sess.run([final_state, pred], feed_dict={x: init_x, y: unused_y, init_state: state, dropout_prob: 1.0})
+                        s,p = sess.run([final_state, pred], feed_dict={x: init_x,
+                                                                       y: unused_y,
+                                                                       init_state: state,
+                                                                       dropout_prob: 1.0,
+                                                                       temp:TEMPERATURE})
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
