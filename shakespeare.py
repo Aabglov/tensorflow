@@ -62,7 +62,7 @@ args = {
     'n_classes':WH.vocab.vocab_size,
     'lstm_size':512,
     'num_layers':3, #2
-    'num_steps':50 #250
+    'num_steps':1 #250
 }
 
 
@@ -158,7 +158,7 @@ with tf.device('/cpu:0'):
     #  TRAINING Parameters
     BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
-    DISPLAY_STEP = 100
+    DISPLAY_STEP = 25
     SAVE_STEP = 10
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
@@ -220,23 +220,26 @@ with tf.device('/cpu:0'):
                     # in the test method we only want to compare
                     # one card output to one card prediction
                     test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
+                    init_x = test_batch[:,0:NUM_STEPS].reshape((1,NUM_STEPS))
+                    unused_y = np.zeros((1,NUM_STEPS))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
                     # We iterate over every pair of letters in our test batch
-                    for i in range(0,test_batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-                        batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                        batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
-                        s,p = sess.run([final_state, pred], feed_dict={x: batch_x, y: batch_y, init_state: state, dropout_prob: 1.0})
+                    for i in range(0,50): # Iterate by NUM_STEPS
+                        #batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
+                        #batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
+                        s,p = sess.run([final_state, pred], feed_dict={x: init_x, y: unused_y, init_state: state, dropout_prob: 1.0})
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
-                            pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                            #pred_letter = WH.vocab.vocab[np.argmax(j[0])]
+                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            pred_letter = WH.vocab.vocab[np.argmax(j[0])]
                             preds.append(pred_letter)
-                        for l in range(batch_y.shape[1]):
-                            true.append(WH.vocab.id2char(batch_y[0][l]))
+                            init_x = np.array([[np.argmax(j[0])]])
+                        #for l in range(batch_y.shape[1]):
+                        #    true.append(WH.vocab.id2char(batch_y[0][l]))
                     print(" ") # Spacer
                     print("PRED: {}".format(''.join(preds)))
-                    print("TRUE: {}".format(''.join(true)))
+                    #print("TRUE: {}".format(''.join(true)))
                     print(" ") # Spacer
 
             end = time.time()
