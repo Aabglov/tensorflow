@@ -80,8 +80,8 @@ with tf.device('/cpu:0'):
     graph = tf.Graph()
     with graph.as_default():
         # Placeholders
-        x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
-        y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
+        x = tf.placeholder(tf.int32, [None, 1], name='input_placeholder')
+        y = tf.placeholder(tf.int32, [None, 1], name='labels_placeholder')
         dropout_prob = tf.placeholder(tf.float32)
 
         # Our initial state placeholder:
@@ -111,10 +111,8 @@ with tf.device('/cpu:0'):
 
         state = rnn_tuple_state
         output_list = []
-        for i in range(NUM_STEPS):
-            # The value of state is updated after processing each batch of words.
-            output, state = stacked_lstm(rnn_inputs[:, i], state)
-            output_list.append(tf.reshape(output,[-1,1,LSTM_SIZE]))
+        output, state = stacked_lstm(rnn_inputs[:,0], state)
+        output_list.append(tf.reshape(output,[-1,1,LSTM_SIZE]))
         final_state = state
         rnn_outputs = tf.concat(output_list,axis=1)
 
@@ -198,11 +196,10 @@ with tf.device('/cpu:0'):
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
-                for i in range(0,batch.shape[1]-NUM_STEPS,NUM_STEPS): # Iterate by NUM_STEPS
-                    #print("BATCH_SIZE: {}, Batch shape: {}".format(BATCH_SIZE,batch.shape))
-                    batch_x = batch[:,i:i+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                for i in range(0,batch.shape[1]-1):
+                    batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
-                    batch_y = batch[:,(i+1):(i+1)+NUM_STEPS].reshape((BATCH_SIZE,NUM_STEPS))
+                    batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
                                                                                   y: batch_y,
