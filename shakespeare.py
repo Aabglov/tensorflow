@@ -56,7 +56,7 @@ except Exception as e:
 
 
 args = {
-    'learning_rate':3e-4,#3e-4
+    'learning_rate':2e-3,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -153,11 +153,11 @@ with tf.device('/cpu:0'):
     #  TRAINING Parameters
     BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
-    DISPLAY_STEP = 25
+    DISPLAY_STEP = 5#25
     SAVE_STEP = 10
-    DECAY_RATE = 1.0
+    DECAY_RATE = 0.97
     DROPOUT_KEEP_PROB = 0.5
-    TEMPERATURE = 1.0#0.8
+    TEMPERATURE = 0.5
 
 
     #Running first session
@@ -182,7 +182,7 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 0
+        already_trained = 41
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
@@ -208,7 +208,7 @@ with tf.device('/cpu:0'):
                                                                                   temp:1.0})
                     state = s
                     sum_cost += c
-                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,sum_cost/BATCH_SIZE, epoch))
+                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,(sum_cost/BATCH_SIZE)/_batch, epoch))
                 # Display logs per epoch step
                 if _batch % DISPLAY_STEP == 0:
                     # Test model
@@ -220,6 +220,7 @@ with tf.device('/cpu:0'):
                     # one card output to one card prediction
                     test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
                     init_x = test_batch[:,0:NUM_STEPS].reshape((1,NUM_STEPS))
+                    preds = [WH.vocab.vocab[np.argmax(init_x[0])]]
                     unused_y = np.zeros((1,NUM_STEPS))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
                     # We iterate over every pair of letters in our test batch
