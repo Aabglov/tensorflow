@@ -157,7 +157,7 @@ with tf.device('/cpu:0'):
     SAVE_STEP = 10
     DECAY_RATE = 1.0
     DROPOUT_KEEP_PROB = 0.5
-    TEMPERATURE = 0.8
+    TEMPERATURE = 1.0#0.8
 
 
     #Running first session
@@ -192,7 +192,7 @@ with tf.device('/cpu:0'):
             num_batches = WH.TrainBatches.num_batches // BATCH_SIZE
             for _batch in range(num_batches):
                 # Generate a batch
-                print("     batch {} of {} processed, epoch {}".format(_batch,num_batches, epoch))
+
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
@@ -208,7 +208,7 @@ with tf.device('/cpu:0'):
                                                                                   temp:1.0})
                     state = s
                     sum_cost += c
-
+                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,sum_cost/BATCH_SIZE, epoch))
                 # Display logs per epoch step
                 if _batch % DISPLAY_STEP == 0:
                     # Test model
@@ -234,8 +234,8 @@ with tf.device('/cpu:0'):
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
-                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                            pred_letter = WH.vocab.vocab[np.argmax(j[0])]
+                            pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            #pred_letter = WH.vocab.vocab[np.argmax(j[0])]
                             preds.append(pred_letter)
                             init_x = np.array([[np.argmax(j[0])]])
                         #for l in range(batch_y.shape[1]):
