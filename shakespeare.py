@@ -213,7 +213,7 @@ with tf.device('/cpu:0'):
                                                                                   temp:1.0})
                     state = s
                     sum_cost += c
-                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,(c/BATCH_SIZE), epoch))
+                print("     batch {} of {} processed, cost: {}, epoch {}".format(_batch,num_batches,c, epoch))
                 # Display logs per epoch step
                 if _batch % DISPLAY_STEP == 0:
                     # Test model
