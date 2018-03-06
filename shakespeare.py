@@ -153,7 +153,7 @@ with tf.device('/cpu:0'):
     #  TRAINING Parameters
     BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
     NUM_EPOCHS = 10000
-    DISPLAY_STEP = 5#25
+    DISPLAY_STEP = 10#25
     SAVE_STEP = 10
     DECAY_RATE = 0.97
     DROPOUT_KEEP_PROB = 0.5
@@ -182,7 +182,7 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 41
+        already_trained = 0
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
