@@ -180,7 +180,7 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 0
+        already_trained = 11
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
