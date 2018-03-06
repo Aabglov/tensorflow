@@ -88,7 +88,7 @@ DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 0.5
 TEMPERATURE = 1.0
 
-already_trained = 11
+already_trained = 21
 
 with tf.device('/cpu:0'):
     graph = tf.Graph()
