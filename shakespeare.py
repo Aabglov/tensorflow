@@ -86,7 +86,7 @@ SAVE_STEP = 10
 DECAY_RATE = 0.97
 DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 0.5
-TEMPERATURE = 0.1
+TEMPERATURE = 0.5
 
 already_trained = 21
 
@@ -148,7 +148,7 @@ with tf.device('/cpu:0'):
         pred = tf.nn.softmax(tf.div(logits,temp))
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-        cost = tf.reduce_sum(losses)
+        cost = tf.reduce_mean(losses)#tf.reduce_sum(losses)
 
         lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
