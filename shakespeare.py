@@ -54,6 +54,11 @@ except Exception as e:
     with open(os.path.join(dir_path,"data",PICKLE_PATH),"wb") as f:
         pickle.dump(WH,f)
 
+# max_len = 75 # Determined by going through entire corpus
+# batch = WH.TrainBatches.next_card_batch(100,1)
+# for b in batch:
+#     print("".join([WH.vocab.vocab[i] for i in b]))
+# HODOR
 
 args = {
     'learning_rate':2e-3,#3e-4
@@ -79,8 +84,11 @@ NUM_EPOCHS = 10000
 DISPLAY_STEP = 10#25
 SAVE_STEP = 10
 DECAY_RATE = 0.97
+DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 0.5
 TEMPERATURE = 1.0
+
+already_trained = 11
 
 with tf.device('/cpu:0'):
     graph = tf.Graph()
@@ -106,9 +114,11 @@ with tf.device('/cpu:0'):
         batch_size = tf.shape(x)[0]
 
         #Inputs
-        #rnn_inputs = tf.one_hot(x, N_CLASSES)
-        embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
-        rnn_inputs = tf.nn.embedding_lookup(embedding, x)
+        onehot = tf.reshape(tf.one_hot(x, N_CLASSES),[-1,N_CLASSES])
+        rnn_inputs  = tf.reshape(tf.layers.dense(inputs=onehot, units=LSTM_SIZE,activation=tf.nn.sigmoid),[-1,1,LSTM_SIZE])
+
+        #embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
+        #rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
         # RNN
         lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
@@ -136,7 +146,6 @@ with tf.device('/cpu:0'):
             logits = tf.reshape(dense,[-1,batch_size, N_CLASSES])
         #pred = tf.nn.softmax(logits)
         pred = tf.nn.softmax(tf.div(logits,temp))
-
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
         cost = tf.reduce_sum(losses)
@@ -180,10 +189,9 @@ with tf.device('/cpu:0'):
             print("Model restore failed {}".format(e))
 
         # Training cycle
-        already_trained = 11
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
             # Set learning rate
-            sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** (epoch % DECAY_STEP)   )))
 
             start = time.time()
             sum_cost = 0
@@ -196,7 +204,6 @@ with tf.device('/cpu:0'):
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
                 for i in range(0,batch.shape[1]-1):
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
-                    #print("batch shape: {}, i: {}, i+1+NUM_STEPS: {}".format(batch.shape,i,i+1+NUM_STEPS))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
@@ -216,15 +223,12 @@ with tf.device('/cpu:0'):
                     # We no longer use BATCH_SIZE here because
                     # in the test method we only want to compare
                     # one card output to one card prediction
-                    test_batch = WH.TestBatches.next_card_batch(1,NUM_STEPS)
-                    init_x = test_batch[:,0:NUM_STEPS].reshape((1,NUM_STEPS))
+                    init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
                     preds = [WH.vocab.vocab[np.argmax(init_x[0])]]
-                    unused_y = np.zeros((1,NUM_STEPS))
+                    unused_y = np.zeros((1,1))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
                     # We iterate over every pair of letters in our test batch
-                    for i in range(0,50): # Iterate by NUM_STEPS
-                        #batch_x = test_batch[:,i:i+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,NUM_STEPS)
-                        #batch_y = test_batch[:,(i+1):(i+1)+NUM_STEPS].reshape((1,NUM_STEPS)) # Reshape to (?,), in this case (1,)
+                    for i in range(0,50):
                         s,p = sess.run([final_state, pred], feed_dict={x: init_x,
                                                                        y: unused_y,
                                                                        init_state: state,
