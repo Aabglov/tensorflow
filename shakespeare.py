@@ -61,7 +61,7 @@ except Exception as e:
 # HODOR
 
 args = {
-    'learning_rate':1e-4,#3e-4
+    'learning_rate':1e-2,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
@@ -86,7 +86,7 @@ SAVE_STEP = 10
 DECAY_RATE = 0.97
 DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 0.5
-TEMPERATURE = 1.0
+TEMPERATURE = 0.1
 
 already_trained = 21
 
@@ -213,7 +213,7 @@ with tf.device('/cpu:0'):
                                                                                   temp:1.0})
                     state = s
                     sum_cost += c
-                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,(sum_cost/BATCH_SIZE)/_batch, epoch))
+                print("     batch {} of {} processed, avg cost: {}, epoch {}".format(_batch,num_batches,(sum_cost/BATCH_SIZE), epoch))
                 # Display logs per epoch step
                 if _batch % DISPLAY_STEP == 0:
                     # Test model
