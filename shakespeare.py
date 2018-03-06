@@ -147,7 +147,7 @@ with tf.device('/cpu:0'):
         #pred = tf.nn.softmax(logits)
         pred = tf.nn.softmax(tf.div(logits,temp))
 
-        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
+        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.reshape(y,[-1,]), logits=tf.reshape(logits,[-1,N_CLASSES]))
         cost = tf.reduce_mean(losses)#tf.reduce_sum(losses)
 
         lr = tf.Variable(0.0, trainable=False)
@@ -229,7 +229,7 @@ with tf.device('/cpu:0'):
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
                     # We iterate over every pair of letters in our test batch
                     for i in range(0,50):
-                        s,p = sess.run([final_state, pred], feed_dict={x: init_x,
+                        s,l,p = sess.run([final_state,logits, pred], feed_dict={x: init_x,
                                                                        y: unused_y,
                                                                        init_state: state,
                                                                        dropout_prob: 1.0,
@@ -246,7 +246,6 @@ with tf.device('/cpu:0'):
                     print(" ") # Spacer
                     print("PRED: {}".format(''.join(preds)))
                     #print("TRUE: {}".format(''.join(true)))
-                    print(" ") # Spacer
 
             end = time.time()
             avg_cost = (sum_cost/BATCH_SIZE)/num_batches
