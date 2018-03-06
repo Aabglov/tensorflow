@@ -74,7 +74,13 @@ N_CLASSES = args['n_classes']
 LSTM_SIZE = args['lstm_size']
 NUM_LAYERS = args['num_layers']
 NUM_STEPS = args['num_steps']
-
+BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
+NUM_EPOCHS = 10000
+DISPLAY_STEP = 10#25
+SAVE_STEP = 10
+DECAY_RATE = 0.97
+DROPOUT_KEEP_PROB = 0.5
+TEMPERATURE = 1.0
 
 with tf.device('/cpu:0'):
     graph = tf.Graph()
@@ -151,14 +157,6 @@ with tf.device('/cpu:0'):
 
     print("Beginning Session")
     #  TRAINING Parameters
-    BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
-    NUM_EPOCHS = 10000
-    DISPLAY_STEP = 10#25
-    SAVE_STEP = 10
-    DECAY_RATE = 0.97
-    DROPOUT_KEEP_PROB = 0.5
-    TEMPERATURE = 0.5
-
 
     #Running first session
     with tf.Session(graph=graph) as sess:
