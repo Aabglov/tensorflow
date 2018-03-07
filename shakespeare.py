@@ -148,7 +148,7 @@ with tf.device('/cpu:0'):
         pred = tf.nn.softmax(tf.div(logits,temp))
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-        cost = tf.div(tf.reduce_sum(losses * 100.0), tf.cast(batch_size,tf.float32))
+        cost = tf.div(tf.reduce_sum(losses ), tf.cast(batch_size,tf.float32))
 
         lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
@@ -202,6 +202,7 @@ with tf.device('/cpu:0'):
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+                batch_cost = 0
                 for i in range(0,batch.shape[1]-1):
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
@@ -213,7 +214,8 @@ with tf.device('/cpu:0'):
                                                                                   temp:1.0})
                     state = s
                     sum_cost += c
-                print("     batch {} of {} processed, cost: {}, epoch {}".format(_batch,num_batches,c, epoch))
+                    batch_cost += c
+                print("     batch {} of {} processed, cost: {}, epoch {}".format(_batch,num_batches,batch_cost, epoch))
                 # Display logs per epoch step
                 if _batch % DISPLAY_STEP == 0:
                     # Test model
