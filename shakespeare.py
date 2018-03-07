@@ -148,7 +148,7 @@ with tf.device('/cpu:0'):
         pred = tf.nn.softmax(tf.div(logits,temp))
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-        cost = tf.div(tf.reduce_sum(losses), tf.cast(batch_size,tf.float32))
+        cost = tf.div(tf.reduce_sum(losses * 100.0), tf.cast(batch_size,tf.float32))
 
         lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
