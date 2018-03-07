@@ -96,7 +96,6 @@ with tf.device('/cpu:0'):
         # Placeholders
         x = tf.placeholder(tf.int32, [None, 1], name='input_placeholder')
         y = tf.placeholder(tf.int32, [None, 1], name='labels_placeholder')
-        mask_seq = tf.placeholder(tf.float32, [None, 1], name='mask_sequence_placeholder')
         dropout_prob = tf.placeholder(tf.float32)
 
         # Our initial state placeholder:
@@ -149,7 +148,7 @@ with tf.device('/cpu:0'):
         pred = tf.nn.softmax(tf.div(logits,temp))
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-        cost = tf.div(tf.reduce_sum(losses * mask_seq), tf.cast(batch_size,tf.float32))
+        cost = tf.div(tf.reduce_sum(losses), tf.cast(batch_size,tf.float32))
 
         lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
@@ -206,15 +205,9 @@ with tf.device('/cpu:0'):
                 for i in range(0,batch.shape[1]-1):
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
-                    #print(batch_y)
-                    mask = np.ones(batch_y.shape)
-                    for i in range(len(mask)):
-                        if y[i][0] == WH.TrainBatches.vocab.pad:
-                            mask[i][0] = 0.0
                     # Run optimization op (backprop) and cost op (to get loss value)
-                    _, s, c, l = sess.run([optimizer, final_state, cost, logits], feed_dict={x: batch_x,
+                    _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
                                                                                   y: batch_y,
-                                                                                  mask_seq: mask,
                                                                                   init_state: state,
                                                                                   dropout_prob: DROPOUT_KEEP_PROB,
                                                                                   temp:1.0})
