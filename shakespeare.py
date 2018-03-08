@@ -84,16 +84,17 @@ N_CLASSES = args['n_classes']
 LSTM_SIZE = args['lstm_size']
 NUM_LAYERS = args['num_layers']
 NUM_STEPS = args['num_steps']
-BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
+BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 100
 DISPLAY_STEP = 10#25
-SAVE_STEP = 10
+SAVE_STEP = 1
 DECAY_RATE = 0.97
 DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 1.0 #0.5
-TEMPERATURE = 1.5
-NUM_PRED = 100
+TEMPERATURE = 1.0
+NUM_PRED = 50
 already_trained = 0
+PRIME_TEXT = "»To be or not to be"
 
 with tf.device('/cpu:0'):
     graph = tf.Graph()
@@ -237,10 +238,22 @@ with tf.device('/cpu:0'):
                     # in the test method we only want to compare
                     # one card output to one card prediction
                     init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
-                    preds = [WH.vocab.vocab[np.argmax(init_x[0])]]
+                    preds = [c for c in PRIME_TEXT] + [" "]
                     unused_y = np.zeros((1,1))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+
+                    # Begin our primed text Feeding
+                    for c in PRIME_TEXT:
+                        prime_x = np.array([WH.vocab.vocab.index(c)]).reshape((1,1))
+                        s, = sess.run([final_state], feed_dict={x: prime_x,
+                                                                   y: unused_y,
+                                                                   init_state: state,
+                                                                   dropout_prob: 1.0,
+                                                                   temp:TEMPERATURE})
+                        state = s
+
                     # We iterate over every pair of letters in our test batch
+                    init_x = np.array([WH.TrainBatches.vocab.vocab.index(' ')]).reshape((1,1))
                     for i in range(0,NUM_PRED):
                         s,l,p = sess.run([final_state,logits, pred], feed_dict={x: init_x,
                                                                        y: unused_y,
