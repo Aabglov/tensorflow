@@ -60,12 +60,17 @@ except Exception as e:
 #     print("".join([WH.vocab.vocab[i] for i in b]))
 # HODOR
 
+def weighted_pick(weights):
+    t = np.cumsum(weights)
+    s = np.sum(weights)
+    return(int(np.searchsorted(t, np.random.rand(1)*s)))
+
 args = {
     'learning_rate':1e-3,#3e-4
     'grad_clip':5.0,
     'n_input':WH.vocab.vocab_size,
     'n_classes':WH.vocab.vocab_size,
-    'lstm_size':512,
+    'lstm_size':512, #128,
     'num_layers':3, #2
     'num_steps':50 #250
 }
@@ -79,13 +84,13 @@ N_CLASSES = args['n_classes']
 LSTM_SIZE = args['lstm_size']
 NUM_LAYERS = args['num_layers']
 NUM_STEPS = args['num_steps']
-BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
-NUM_EPOCHS = 10000
+BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
+NUM_EPOCHS = 100
 DISPLAY_STEP = 10#25
 SAVE_STEP = 10
 DECAY_RATE = 0.97
 DECAY_STEP = 5
-DROPOUT_KEEP_PROB = 0.5
+DROPOUT_KEEP_PROB = 1.0 #0.5
 TEMPERATURE = 0.5
 
 already_trained = 0
@@ -114,8 +119,10 @@ with tf.device('/cpu:0'):
         batch_size = tf.shape(x)[0]
 
         #Inputs
-        onehot = tf.reshape(tf.one_hot(x, N_CLASSES),[-1,N_CLASSES])
-        rnn_inputs  = tf.reshape(tf.layers.dense(inputs=onehot, units=LSTM_SIZE,activation=tf.nn.sigmoid),[-1,1,LSTM_SIZE])
+        #onehot = tf.reshape(tf.one_hot(x, N_CLASSES),[-1,N_CLASSES])
+        #rnn_inputs  = tf.reshape(tf.layers.dense(inputs=onehot, units=LSTM_SIZE,activation=tf.nn.sigmoid),[-1,1,LSTM_SIZE])
+        embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
+        rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
         #embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
         #rnn_inputs = tf.nn.embedding_lookup(embedding, x)
@@ -239,10 +246,12 @@ with tf.device('/cpu:0'):
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
-                            pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                            pred_index = weighted_pick(j)
+                            pred_letter = WH.vocab.vocab[pred_index]
                             #pred_letter = WH.vocab.vocab[np.argmax(j[0])]
                             preds.append(pred_letter)
-                            init_x = np.array([[np.argmax(j[0])]])
+                            init_x = np.array([[pred_index]])
                         #for l in range(batch_y.shape[1]):
                         #    true.append(WH.vocab.id2char(batch_y[0][l]))
                     print(" ") # Spacer
