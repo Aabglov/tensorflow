@@ -91,8 +91,8 @@ SAVE_STEP = 10
 DECAY_RATE = 0.97
 DECAY_STEP = 5
 DROPOUT_KEEP_PROB = 1.0 #0.5
-TEMPERATURE = 0.5
-
+TEMPERATURE = 1.5
+NUM_PRED = 100
 already_trained = 0
 
 with tf.device('/cpu:0'):
@@ -189,11 +189,15 @@ with tf.device('/cpu:0'):
             # then recreate the correct path and restore from there.
             restore_path = ckpt.model_checkpoint_path
             restore_file = os.path.basename(restore_path)
+            ckpt_file = os.path.basename(restore_path)
+            already_trained = int(ckpt_file.replace(CHECKPOINT_NAME+"-",""))
             new_path = os.path.join(dir_path,"saved",SAVE_DIR,restore_file)
             saver.restore(sess, new_path)#ckpt.model_checkpoint_path)
             print("Model restored from file: %s" % model_path)
+            print("__________________________________________")
         except Exception as e:
             print("Model restore failed {}".format(e))
+            print("__________________________________________")
 
         # Training cycle
         for epoch in range(already_trained,already_trained+NUM_EPOCHS):
@@ -237,7 +241,7 @@ with tf.device('/cpu:0'):
                     unused_y = np.zeros((1,1))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
                     # We iterate over every pair of letters in our test batch
-                    for i in range(0,50):
+                    for i in range(0,NUM_PRED):
                         s,l,p = sess.run([final_state,logits, pred], feed_dict={x: init_x,
                                                                        y: unused_y,
                                                                        init_state: state,
