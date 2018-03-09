@@ -24,7 +24,7 @@ tf.set_random_seed(seed)
 
 ######################################### CONSTANTS ########################################
 DEVICE = "/gpu:0" # Controls whether we run on CPU or GPU
-LEARNING_RATE = 0.0002 #0.001
+LEARNING_RATE = 2e-3 #0.001
 DECAY_RATE = 1.0
 ADAM_BETA = 0.5
 GRAD_CLIP = 5.0
@@ -38,7 +38,7 @@ MAX_SEQ_LEN = 50
 EMBEDDING_DIM = 128
 LSTM_SIZE = 128 #512
 NUM_LAYERS = 2 #3
-
+PRIME_TEXT = "how are you doing today ?".split(" ")
 DEBUG = False #True
 
 GO =    dialog_parser.GO
@@ -122,9 +122,8 @@ if DEBUG:
 padded_input = [padSequence(i,pad_val) for i in input_seq]
 padded_target= [padSequence(t,pad_val) for t in target_seq]
 
-encoder_input = np.asarray(padded_input,dtype='float32')
-decoder_target = np.asarray(padded_target,dtype='float32')
-
+encoder_input = np.asarray(padded_input,dtype='int32')
+decoder_target = np.asarray(padded_target,dtype='int32')
 
 if DEBUG:
     print(encoder_input.shape)
@@ -132,175 +131,183 @@ if DEBUG:
 
 
 ######################################### UTILITY FUNCTIONS ########################################
-with tf.device(DEVICE):
-
-    # DEFINE MODEL
-    graph = tf.Graph()
-    with graph.as_default():
-
-        # Input placeholders
-        with tf.name_scope('input'):
-            # Placeholders
-            x = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='input_placeholder')
-            y = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='labels_placeholder')
-            #dropout_prob = tf.placeholder(tf.float32)
-            # Our initial state placeholder:
-            init_state_placeholder = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='encoder_state_placeholder')
-
-        # Recurrent Neural Network
-        def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
-            with tf.variable_scope(name):
-                # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
-                l = tf.unstack(init_state, axis=0)
-                rnn_tuple_state = tuple(
-                    [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)]
-                )
-
-                # Get dynamic batch_size
-                batch_size = tf.shape(x)[0]
-
-                # RNN
-                lstm = tf.contrib.rnn.LSTMCell(lstm_size)
-                dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
-                stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * num_layers)
-                rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
-                                                             inputs=input_tensor,
-                                                             initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
-                return rnn_outputs,final_state
+#with tf.device(DEVICE):
 
 
-        # ENCODER
-        def encoder(input_tensor,init_state):
-            num_layers = NUM_LAYERS
-            lstm_size = LSTM_SIZE
-            num_classes = len(vocab)
-            dropout_prob = 0.3
+# Input placeholders
+with tf.name_scope('input'):
+    # Placeholders
+    x = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='input_placeholder')
+    y = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='labels_placeholder')
+    #dropout_prob = tf.placeholder(tf.float32)
+    # Our initial state placeholder:
+    init_state_placeholder = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='encoder_state_placeholder')
 
-            #Inputs
-            with tf.name_scope('encoder'):
-                embedding = tf.get_variable("embedding", [num_classes, EMBEDDING_DIM])
-                rnn_inputs = tf.nn.embedding_lookup(embedding, input_tensor)
+# Recurrent Neural Network
+def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
+    with tf.variable_scope(name):
+        # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
+        l = tf.unstack(init_state, axis=0)
+        rnn_tuple_state = tuple(
+            [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)]
+        )
 
-            rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'encoder',dropout_prob)
+        # Get dynamic batch_size
+        batch_size = tf.shape(x)[0]
 
-            return rnn_out,rnn_state
+        # RNN
+        lstm = tf.contrib.rnn.LSTMCell(lstm_size)
+        dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
+        stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * num_layers)
+        rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                     inputs=input_tensor,
+                                                     initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+        return rnn_outputs,final_state
 
-        # DECODER
-        def decoder(input_tensor,init_state):
-            num_layers = NUM_LAYERS
-            lstm_size = LSTM_SIZE
-            dropout_prob = 0.3
-            rnn_out,rnn_state = RNN(input_tensor,init_state,num_layers,lstm_size,'decoder',dropout_prob)
 
-            dense_out = tf.layers.dense(rnn_out,len(vocab),activation=None,use_bias=True)
+# ENCODER
+def encoder(input_tensor,init_state):
+    num_layers = NUM_LAYERS
+    lstm_size = LSTM_SIZE
+    num_classes = len(vocab)
+    dropout_prob = 0.3
 
-            return dense_out
+    #Inputs
+    with tf.name_scope('encoder'):
+        embedding = tf.get_variable("embedding", [num_classes, EMBEDDING_DIM])
+        rnn_inputs = tf.nn.embedding_lookup(embedding, input_tensor)
 
-        with tf.variable_scope("model") as scope:
-            encoder_out,encoder_state = encoder(x,init_state_placeholder)
-            # decoder_out are our logits
-            decoder_out = decoder(encoder_out, encoder_state)
-            pred = tf.nn.softmax(decoder_out)
+    rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'encoder',dropout_prob)
 
-        # Define loss function(s)
-        with tf.name_scope('loss'):
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=decoder_out)
-            cost = tf.reduce_mean(loss)
-            tf.summary.scalar('cost', cost)
+    return rnn_out,rnn_state
 
-        # Define optimizer
-        with tf.name_scope('train'):
-            #train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
-            #train_step = tf.train.AdamOptimizer(LEARNING_RATE,beta1=ADAM_BETA).minimize(loss)
-            lr = tf.Variable(0.0, trainable=False)
-            tvars = tf.trainable_variables()
-            grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
-            with tf.name_scope('optimizer'):
-                op = tf.train.AdamOptimizer(lr)
-            optimizer = op.apply_gradients(zip(grads, tvars))
+# DECODER
+def decoder(input_tensor,init_state):
+    num_layers = NUM_LAYERS
+    lstm_size = LSTM_SIZE
+    dropout_prob = 0.3
+    rnn_out,rnn_state = RNN(input_tensor,init_state,num_layers,lstm_size,'decoder',dropout_prob)
+    dense_out = tf.layers.dense(rnn_out,len(vocab),activation=None,use_bias=True)
 
-        # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
-        merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), graph)
+    return dense_out
 
-        # Initializing the variables
-        init = tf.global_variables_initializer()
-        local_init = tf.local_variables_initializer()
+with tf.variable_scope("model") as scope:
+    encoder_out,encoder_state = encoder(x,init_state_placeholder)
+    # decoder_out are our logits
+    decoder_out = decoder(encoder_out, encoder_state)
+    pred = tf.nn.softmax(decoder_out)
 
-        # 'Saver' op to save and restore all the variables
-        saver = tf.train.Saver()
+# Define loss function(s)
+with tf.name_scope('loss'):
+    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=decoder_out)
+    cost = tf.reduce_mean(loss)
+    tf.summary.scalar('cost', cost)
+
+# Define optimizer
+with tf.name_scope('train'):
+    #train_d_step = tf.train.AdamOptimizer(DIS_LEARNING_RATE,beta1=ADAM_BETA).minimize(discriminator_loss,var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='discriminator'))
+    #train_step = tf.train.AdamOptimizer(LEARNING_RATE,beta1=ADAM_BETA).minimize(loss)
+    lr = tf.Variable(0.0, trainable=False)
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
+    with tf.name_scope('optimizer'):
+        op = tf.train.AdamOptimizer(lr)
+    optimizer = op.apply_gradients(zip(grads, tvars))
+
+# Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
+merged = tf.summary.merge_all()
+train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR,'train'), tf.get_default_graph())
+
+# Initializing the variables
+init = tf.global_variables_initializer()
+local_init = tf.local_variables_initializer()
+
+# 'Saver' op to save and restore all the variables
+saver = tf.train.Saver()
 
 #Running first session
 #def main():
-with tf.Session(graph=graph) as sess:#,config=tf.ConfigProto(log_device_placement=True)) as sess:
-    # Initialize variables
-    sess.run(init)
-    sess.run(local_init)
+if __name__ == "__main__":
+    with tf.Session() as sess:#,config=tf.ConfigProto(log_device_placement=True)) as sess:
+        # Initialize variables
+        sess.run(init)
+        sess.run(local_init)
 
-    try:
-        ckpt = tf.train.get_checkpoint_state(CHKPT_PATH)
-        saver.restore(sess, ckpt.model_checkpoint_path)
-        print("Model restored from file: %s" % SAVE_PATH)
-    except Exception as e:
-        print("Model restore failed {}".format(e))
+        try:
+            ckpt = tf.train.get_checkpoint_state(CHKPT_PATH)
+            saver.restore(sess, ckpt.model_checkpoint_path)
+            print("Model restored from file: %s" % SAVE_PATH)
+        except Exception as e:
+            print("Model restore failed {}".format(e))
 
-    # Training cycle
-    already_trained = 0
-    for epoch in range(already_trained,already_trained+MAX_STEPS):
-        # Set learning rate
-        sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-        for i in range(0,NUM_SAMPLES//BATCH_SIZE):
-            # Reset state value
-            new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
-            # Generate a batch
-            batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
-            batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+        # Training cycle
+        already_trained = 0
+        for epoch in range(already_trained,already_trained+MAX_STEPS):
+            # Set learning rate
+            sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            for i in range(0,NUM_SAMPLES//BATCH_SIZE):
+                # Reset state value
+                new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
+                # Generate a batch
+                batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+                batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
 
-            #print(batch_x.shape)
-            #print(batch_y.shape)
-            #print(batch_x[0][-10:])
-            #HODOR
+                # print(encoder_input.shape)
+                # print(decoder_target.shape)
+                # print(encoder_input[0].shape)
+                # print(" ".join([reverse_vocab_lookup[b] for b in encoder_input[0]]))
+                # print(" ".join([reverse_vocab_lookup[b] for b in encoder_input[1]]))
+                # print(" ".join([reverse_vocab_lookup[b] for b in decoder_target[0]]))
+                # print(batch_x.shape)
+                # print(batch_y.shape)
+                # print("|".join([reverse_vocab_lookup[b] for b in batch_x[0]]))
+                # print(" ".join([reverse_vocab_lookup[b] for b in batch_y[0]]))
+                # HODOR
 
-            # Run optimization op (backprop) and cost op (to get loss value)
-            fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
-            summary, s, predicted_output, c, _ = sess.run([merged, encoder_state, pred, cost, optimizer], feed_dict=fd)
-            train_writer.add_summary(summary, epoch)
-
-            first_pred_output = predicted_output[0]
-            pred_letters = []
-            for p in first_pred_output:
-                pred_letter = np.random.choice(vocab, 1, p=p)[0]
-                #pred_letter = reverse_vocab_lookup[np.argmax(p)]
-                pred_letters.append(pred_letter)
-            sample = ' '.join(pred_letters)
-            print('iteration',i,'of',NUM_SAMPLES//BATCH_SIZE,'cost: ', c, 'pred: ',sample)
-
-
-            # Display logs per epoch step
-            if i % LOG_FREQUENCY == 0:
-                #   I'm not a billion percent sure what this does....
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                run_metadata = tf.RunMetadata()
+                # Run optimization op (backprop) and cost op (to get loss value)
                 fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
-                summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
-                                      feed_dict=fd,
-                                      options=run_options,
-                                      run_metadata=run_metadata)
-                train_writer.add_run_metadata(run_metadata, "step_{}".format(i))
+                summary, s, predicted_output, c, _ = sess.run([merged, encoder_state, pred, cost, optimizer], feed_dict=fd)
                 train_writer.add_summary(summary, epoch)
-                print('Adding run metadata for', epoch)
-                save_path = saver.save(sess, SAVE_PATH, global_step = i)
-                print('Step %s' % epoch)
 
-    # Cleanup
-    #   Finish off the filename queue coordinator.
-    coord.request_stop()
-    coord.join(threads)
-    #   Close writers
-    train_writer.close()
-    #test_writer.close()
-    print("Training Finished!")
+                sample_input = padSequence(PRIME_TEXT,pad_val)
+                print(sample_input.shape)
+                HODRO
+                
+                first_pred_output = predicted_output[0]
+                pred_letters = []
+                for p in first_pred_output:
+                    pred_letter = np.random.choice(vocab, 1, p=p)[0]
+                    #pred_letter = reverse_vocab_lookup[np.argmax(p)]
+                    pred_letters.append(pred_letter)
+                sample = '+'.join(pred_letters)
+                print('iteration',i,'of',NUM_SAMPLES//BATCH_SIZE,'cost: ', c, 'pred: ',sample)
 
-    # Save model weights to disk
-    save_path = saver.save(sess, SAVE_PATH)
-    print("Model saved in file: %s" % save_path)
+
+                # Display logs per epoch step
+                if i % LOG_FREQUENCY == 0:
+                    #   I'm not a billion percent sure what this does....
+                    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                    run_metadata = tf.RunMetadata()
+                    fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
+                    summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
+                                          feed_dict=fd,
+                                          options=run_options,
+                                          run_metadata=run_metadata)
+                    train_writer.add_run_metadata(run_metadata, "step_{}".format(i))
+                    train_writer.add_summary(summary, epoch)
+                    print('Adding run metadata for', epoch)
+                    save_path = saver.save(sess, SAVE_PATH, global_step = i)
+                    print('Step %s' % epoch)
+
+        # Cleanup
+        #   Finish off the filename queue coordinator.
+        coord.request_stop()
+        coord.join(threads)
+        #   Close writers
+        train_writer.close()
+        #test_writer.close()
+        print("Training Finished!")
+
+        # Save model weights to disk
+        save_path = saver.save(sess, SAVE_PATH)
+        print("Model saved in file: %s" % save_path)

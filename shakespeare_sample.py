@@ -19,7 +19,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
 checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
 data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
-PRIME_TEXT = "[SCENE I]"
+PRIME_TEXT = "SCENE I."
 TEMPERATURE = 0.5
 NUM_PRED = 100
 
