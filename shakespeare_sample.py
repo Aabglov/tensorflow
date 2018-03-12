@@ -25,7 +25,7 @@ NUM_PRED = 100
 
 WH = getWordHelpers()
 
-saver = tf.train.import_meta_graph(os.path.join(checkpoint_path,"shakespeare_rec_char_steps.ckpt-0.meta"))
+saver = tf.train.import_meta_graph(os.path.join(checkpoint_path,"shakespeare_rec_char_steps.ckpt-21.meta"))
 
 # We can now access the default graph where all our metadata has been loaded
 graph = tf.get_default_graph()
@@ -99,14 +99,37 @@ with tf.Session(graph=graph) as sess:
                                                        init_state: state,
                                                        dropout_prob: 1.0,
                                                        temp:TEMPERATURE})
-        state = s
+
         # Choose a letter from our vocabulary based on our output probability: p
         for j in p:
             #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
             pred_index = weighted_pick(j)
             pred_letter = WH.vocab.vocab[pred_index]
-            preds.append(pred_letter)
-            init_x = np.array([[pred_index]])
+            if pred_letter != WH.vocab.pad:
+                preds.append(pred_letter)
+                init_x = np.array([[pred_index]])
+        state = s
+
+    for _ in range(10):
+        preds.append("\n")
+        state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+        init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
+        for i in range(0,NUM_PRED):
+            s,p = sess.run([final_state, pred], feed_dict={x: init_x,
+                                                           y: unused_y,
+                                                           init_state: state,
+                                                           dropout_prob: 1.0,
+                                                           temp:TEMPERATURE})
+            state = s
+            # Choose a letter from our vocabulary based on our output probability: p
+            for j in p:
+                #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
+                pred_index = weighted_pick(j)
+                pred_letter = WH.vocab.vocab[pred_index]
+                if pred_letter != WH.vocab.pad:
+                    preds.append(pred_letter)
+                init_x = np.array([[pred_index]])
+
     print(" ") # Spacer
     print("PRED: {}".format(''.join(preds)))
     #print("TRUE: {}".format(''.join(true)))

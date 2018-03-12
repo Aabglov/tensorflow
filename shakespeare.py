@@ -23,25 +23,12 @@ checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
 data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
 
-args = {
-    'learning_rate':1e-3,#3e-4
-    'grad_clip':5.0,
-    'n_input': 105,#WH.vocab.vocab_size,
-    'n_classes': 105,#WH.vocab.vocab_size,
-    'lstm_size': 512, #128
-    'num_layers': 3, #2
-    'num_steps':50 #250
-}
-
-
 # Network Parameters
-LEARNING_RATE = args['learning_rate']
-GRAD_CLIP = args['grad_clip']
-N_INPUT = args['n_input']
-N_CLASSES = args['n_classes']
-LSTM_SIZE = args['lstm_size']
-NUM_LAYERS = args['num_layers']
-NUM_STEPS = args['num_steps']
+LEARNING_RATE = 1e-3
+GRAD_CLIP = 5.0
+LSTM_SIZE = 512 #128
+NUM_LAYERS = 3 #2
+MAX_SEQ_LEN = 50
 BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 100
 DISPLAY_STEP = 10#25
@@ -52,56 +39,67 @@ DROPOUT_KEEP_PROB = 1.0 #0.5
 TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
-PRIME_TEXT = "»"
+PRIME_TEXT = "SCENE I."
 
 def weighted_pick(weights):
     t = np.cumsum(weights)
     s = np.sum(weights)
     return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
-def getWordHelpers():
-    try:
-        with open(os.path.join(dir_path,"data",PICKLE_PATH),"rb") as f:
-            WH = pickle.load(f)
-    except Exception as e:
-        print(e)
-        # What's with those weird symbols?
-        # u'\xbb' is our GO symbol (»)
-        # u'\xac' is our UNKNOWN symbol (¬)
-        # u'\xa4' is our END symbol (¤)
-        # They're arbitrarily chosen, but
-        # I think they both:
-        #   1). Are unlikely to appear in regular data, let alone cleaned data.
-        #   2). Look awesome.
-        vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
-                 '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
-                 '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-                 "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xf8',u'\xa4',u'\u00BB']
-
-        # Load mtg tokenized data
-        # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
-        with open(data_path,"r") as f:
-             # Each card occupies its own line in this tokenized version
-             raw_txt = f.read()#.split("\n")
-        WH = word_helpers.WordHelper(raw_txt, vocab)
-        #WH = word_helpers.JSONHelper(data_path,vocab)
-
-
-        # Save our WordHelper
-        with open(os.path.join(dir_path,"data",PICKLE_PATH),"wb") as f:
-            pickle.dump(WH,f)
-    return WH
-
 # max_len = 75 # Determined by going through entire corpus
 # batch = WH.TrainBatches.next_card_batch(100,1)
 # for b in batch:
 #     print("".join([WH.vocab.vocab[i] for i in b]))
-# HODOR
+
+try:
+    with open(os.path.join(checkpoint_path,"vocab_shake.pkl"),"rb") as f:
+        vocab = pickle.load(f)
+    with open(os.path.join(checkpoint_path,"batches_shake.pkl"),"rb") as f:
+        batches = pickle.load(f)
+    print("Training data loaded...")
+except Exception as e:
+    print(e)
+    vocab = "1 2 3 4 5 6 7 8 9 0".split(" ")
+    vocab += "a b c d e f g h i j k l m n o p q r s t u v w x y z".split(" ")
+    vocab += "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split(" ")
+    vocab += ['|', ' ', '&', '^', '/', '{', '}', ',', ':', '.', '\\',  '@', '+', '"', "'", '-', '*', '%', '[', '=', ']', '~']
+    vocab += [u'\xbb',  u'\xac', u'\xf8', u'\xa4', u'\u00BB']
+
+    with open(data_path,"r") as f:
+         # Each card occupies its own line in this tokenized version
+         raw_txt = f.read()#.split("\n")
+    print(len(raw_txt))
+    dynamic_vocab = list(set(raw_txt))
+    print(len(vocab))
+    print(len(dynamic_vocab))
+    for v in vocab:
+        if v not in dynamic_vocab:
+            print("MISSING FROM DYNAMIC VOCAB: {}".format(v))
+
+    for v in dynamic_vocab:
+        if v not in vocab:
+            print("MISSING FROM VOCAB: {}".format(v))
+
+    vocab = list(set(vocab + dynamic_vocab))
+    print("FINAL VOCAB SIZE: {}".format(len(vocab)))
 
 
-#with tf.device('/cpu:0'):
-#graph = tf.Graph()
-#with graph.as_default():
+    batches = []
+    for i in range(0,len(raw_txt),MAX_SEQ_LEN*BATCH_SIZE):
+        text = raw_txt[i:i+(MAX_SEQ_LEN*BATCH_SIZE)]
+        if len(text) == MAX_SEQ_LEN*BATCH_SIZE:
+            vals = [vocab.index(t) for t in text]
+            batch = np.array(vals).reshape((BATCH_SIZE,MAX_SEQ_LEN))
+            batches.append(batch)
+
+    with open(os.path.join(checkpoint_path,"vocab_shake.pkl"),"wb") as f:
+        pickle.dump(vocab,f)
+    with open(os.path.join(checkpoint_path,"batches_shake.pkl"),"wb") as f:
+        pickle.dump(batches,f)
+    print("data saved")
+
+NUM_BATCHES = len(batches)
+N_CLASSES = len(vocab)
 
 # Placeholders
 x = tf.placeholder(tf.int32, [None, 1], name='input_placeholder')
@@ -180,7 +178,6 @@ saver = tf.train.Saver()
 if __name__ == "__main__":
     print("Beginning Session")
     #  TRAINING Parameters
-    WH = getWordHelpers()
     #Running first session
     with tf.Session() as sess:
         # Initialize variables
@@ -213,15 +210,13 @@ if __name__ == "__main__":
 
             start = time.time()
             sum_cost = 0
-            num_batches = WH.TrainBatches.num_batches // BATCH_SIZE
-            for _batch in range(num_batches):
-                # Generate a batch
-
-                batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
+            random.shuffle(batches)
+            for batch_ind in range(len(batches)): # Get a batch
+                batch = batches[batch_ind]
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
                 batch_cost = 0
-                for i in range(0,batch.shape[1]-1):
+                for i in range(0,MAX_SEQ_LEN-1):
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)
@@ -233,9 +228,9 @@ if __name__ == "__main__":
                     state = s
                     sum_cost += c
                     batch_cost += c
-                print("     batch {} of {} processed, cost: {}, epoch {}".format(_batch,num_batches,batch_cost/(batch.shape[1]-1), epoch))
+                print("     batch {} of {} processed, cost: {}, epoch {}".format(batch_ind,NUM_BATCHES,batch_cost/(MAX_SEQ_LEN-1), epoch))
                 # Display logs per epoch step
-                if _batch % DISPLAY_STEP == 0:
+                if batch_ind % DISPLAY_STEP == 0:
                     # Test model
                     preds = []
                     true = []
@@ -243,14 +238,13 @@ if __name__ == "__main__":
                     # We no longer use BATCH_SIZE here because
                     # in the test method we only want to compare
                     # one card output to one card prediction
-                    init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
                     preds = [c for c in PRIME_TEXT] + [" "]
                     unused_y = np.zeros((1,1))
                     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
 
                     # Begin our primed text Feeding
                     for c in PRIME_TEXT:
-                        prime_x = np.array([WH.vocab.vocab.index(c)]).reshape((1,1))
+                        prime_x = np.array([vocab.index(c)]).reshape((1,1))
                         s, = sess.run([final_state], feed_dict={x: prime_x,
                                                                    y: unused_y,
                                                                    init_state: state,
@@ -259,7 +253,7 @@ if __name__ == "__main__":
                         state = s
 
                     # We iterate over every pair of letters in our test batch
-                    init_x = np.array([WH.TrainBatches.vocab.vocab.index(' ')]).reshape((1,1))
+                    init_x = np.array([vocab.index(' ')]).reshape((1,1))
                     for i in range(0,NUM_PRED):
                         s,l,p = sess.run([final_state,logits, pred], feed_dict={x: init_x,
                                                                        y: unused_y,
@@ -269,21 +263,17 @@ if __name__ == "__main__":
                         state = s
                         # Choose a letter from our vocabulary based on our output probability: p
                         for j in p:
-                            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
                             pred_index = weighted_pick(j)
-                            pred_letter = WH.vocab.vocab[pred_index]
-                            #pred_letter = WH.vocab.vocab[np.argmax(j[0])]
+                            pred_letter = vocab[pred_index]
                             preds.append(pred_letter)
                             init_x = np.array([[pred_index]])
-                        #for l in range(batch_y.shape[1]):
-                        #    true.append(WH.vocab.id2char(batch_y[0][l]))
                     print(" ") # Spacer
                     print("PRED: {}".format(''.join(preds)))
                     save_path = saver.save(sess, model_path, global_step = epoch)
                     #print("TRUE: {}".format(''.join(true)))
 
             end = time.time()
-            avg_cost = (sum_cost/BATCH_SIZE)/num_batches
+            avg_cost = (sum_cost/BATCH_SIZE)/NUM_BATCHES
             print("Epoch:", '%04d' % (epoch), "cost=" , "{:.9f}".format(avg_cost), "time:", "{}".format(end-start))
 
             if epoch % SAVE_STEP == 0 and epoch != 0:
