@@ -5,6 +5,7 @@ import os
 import time
 import word_helpers
 import dialog_parser
+import caffeine
 
 #from tensorflow.examples.tutorials.mnist import input_data
 #mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
@@ -148,6 +149,7 @@ def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
     with tf.variable_scope(name):
         # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
         l = tf.unstack(init_state, axis=0)
+
         rnn_tuple_state = tuple(
             [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)]
         )
@@ -266,20 +268,25 @@ if __name__ == "__main__":
 
                 # Run optimization op (backprop) and cost op (to get loss value)
                 fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
-                summary, s, predicted_output, c, _ = sess.run([merged, encoder_state, pred, cost, optimizer], feed_dict=fd)
+                summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer], feed_dict=fd)
                 train_writer.add_summary(summary, epoch)
 
-                sample_input = padSequence(PRIME_TEXT,pad_val)
-                print(sample_input.shape)
-                HODRO
-                
+                int_prime = [vocab_lookup[p] for p in PRIME_TEXT]
+                sample_input = padSequence(int_prime,pad_val)
+                sample_batch = np.array(sample_input).reshape((1,MAX_SEQ_LEN))
+                unused_y = np.zeros((1,MAX_SEQ_LEN))
+                sample_init_state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+
+                fd= {x: sample_batch, y: unused_y, init_state_placeholder: sample_init_state}
+                summary, predicted_output = sess.run([merged, pred], feed_dict=fd)
+
                 first_pred_output = predicted_output[0]
                 pred_letters = []
                 for p in first_pred_output:
                     pred_letter = np.random.choice(vocab, 1, p=p)[0]
                     #pred_letter = reverse_vocab_lookup[np.argmax(p)]
                     pred_letters.append(pred_letter)
-                sample = '+'.join(pred_letters)
+                sample = ' '.join(pred_letters)
                 print('iteration',i,'of',NUM_SAMPLES//BATCH_SIZE,'cost: ', c, 'pred: ',sample)
 
 
