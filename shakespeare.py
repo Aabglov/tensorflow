@@ -16,6 +16,8 @@ CHECKPOINT_NAME = "shakespeare_rec_char_steps.ckpt"
 DATA_NAME = "shakey_bill.txt"
 PICKLE_PATH = "shakespeare_tokenized_wh.pkl"
 SUBDIR_NAME = "shakespeare"
+VOCAB_NAME = "vocab_shake.pkl"
+BATCHES_NAME = "batches_shake.pkl"
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
@@ -40,66 +42,61 @@ TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
 PRIME_TEXT = "SCENE I."
+N_CLASSES = 105
 
 def weighted_pick(weights):
     t = np.cumsum(weights)
     s = np.sum(weights)
     return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
-# max_len = 75 # Determined by going through entire corpus
-# batch = WH.TrainBatches.next_card_batch(100,1)
-# for b in batch:
-#     print("".join([WH.vocab.vocab[i] for i in b]))
+def getTrainingData():
+    try:
+        with open(os.path.join(checkpoint_path,VOCAB_NAME),"rb") as f:
+            vocab = pickle.load(f)
+        with open(os.path.join(checkpoint_path,BATCHES_NAME),"rb") as f:
+            batches = pickle.load(f)
+        print("Training data loaded...")
+    except Exception as e:
+        print(e)
+        vocab = "1 2 3 4 5 6 7 8 9 0".split(" ")
+        vocab += "a b c d e f g h i j k l m n o p q r s t u v w x y z".split(" ")
+        vocab += "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split(" ")
+        vocab += ['|', ' ', '&', '^', '/', '{', '}', ',', ':', '.', '\\',  '@', '+', '"', "'", '-', '*', '%', '[', '=', ']', '~']
+        vocab += [u'\xbb',  u'\xac', u'\xf8', u'\xa4', u'\u00BB']
 
-try:
-    with open(os.path.join(checkpoint_path,"vocab_shake.pkl"),"rb") as f:
-        vocab = pickle.load(f)
-    with open(os.path.join(checkpoint_path,"batches_shake.pkl"),"rb") as f:
-        batches = pickle.load(f)
-    print("Training data loaded...")
-except Exception as e:
-    print(e)
-    vocab = "1 2 3 4 5 6 7 8 9 0".split(" ")
-    vocab += "a b c d e f g h i j k l m n o p q r s t u v w x y z".split(" ")
-    vocab += "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split(" ")
-    vocab += ['|', ' ', '&', '^', '/', '{', '}', ',', ':', '.', '\\',  '@', '+', '"', "'", '-', '*', '%', '[', '=', ']', '~']
-    vocab += [u'\xbb',  u'\xac', u'\xf8', u'\xa4', u'\u00BB']
+        with open(data_path,"r") as f:
+             # Each card occupies its own line in this tokenized version
+             raw_txt = f.read()#.split("\n")
+        print(len(raw_txt))
+        dynamic_vocab = list(set(raw_txt))
+        print(len(vocab))
+        print(len(dynamic_vocab))
+        for v in vocab:
+            if v not in dynamic_vocab:
+                print("MISSING FROM DYNAMIC VOCAB: {}".format(v))
 
-    with open(data_path,"r") as f:
-         # Each card occupies its own line in this tokenized version
-         raw_txt = f.read()#.split("\n")
-    print(len(raw_txt))
-    dynamic_vocab = list(set(raw_txt))
-    print(len(vocab))
-    print(len(dynamic_vocab))
-    for v in vocab:
-        if v not in dynamic_vocab:
-            print("MISSING FROM DYNAMIC VOCAB: {}".format(v))
+        for v in dynamic_vocab:
+            if v not in vocab:
+                print("MISSING FROM VOCAB: {}".format(v))
 
-    for v in dynamic_vocab:
-        if v not in vocab:
-            print("MISSING FROM VOCAB: {}".format(v))
-
-    vocab = list(set(vocab + dynamic_vocab))
-    print("FINAL VOCAB SIZE: {}".format(len(vocab)))
+        vocab = list(set(vocab + dynamic_vocab))
+        print("FINAL VOCAB SIZE: {}".format(len(vocab)))
 
 
-    batches = []
-    for i in range(0,len(raw_txt),MAX_SEQ_LEN*BATCH_SIZE):
-        text = raw_txt[i:i+(MAX_SEQ_LEN*BATCH_SIZE)]
-        if len(text) == MAX_SEQ_LEN*BATCH_SIZE:
-            vals = [vocab.index(t) for t in text]
-            batch = np.array(vals).reshape((BATCH_SIZE,MAX_SEQ_LEN))
-            batches.append(batch)
+        batches = []
+        for i in range(0,len(raw_txt),MAX_SEQ_LEN*BATCH_SIZE):
+            text = raw_txt[i:i+(MAX_SEQ_LEN*BATCH_SIZE)]
+            if len(text) == MAX_SEQ_LEN*BATCH_SIZE:
+                vals = [vocab.index(t) for t in text]
+                batch = np.array(vals).reshape((BATCH_SIZE,MAX_SEQ_LEN))
+                batches.append(batch)
 
-    with open(os.path.join(checkpoint_path,"vocab_shake.pkl"),"wb") as f:
-        pickle.dump(vocab,f)
-    with open(os.path.join(checkpoint_path,"batches_shake.pkl"),"wb") as f:
-        pickle.dump(batches,f)
-    print("data saved")
-
-NUM_BATCHES = len(batches)
-N_CLASSES = len(vocab)
+        with open(os.path.join(checkpoint_path,VOCAB_NAME),"wb") as f:
+            pickle.dump(vocab,f)
+        with open(os.path.join(checkpoint_path,BATCHES_NAME),"wb") as f:
+            pickle.dump(batches,f)
+        print("data saved")
+    return vocab,batches
 
 # Placeholders
 x = tf.placeholder(tf.int32, [None, 1], name='input_placeholder')
@@ -178,6 +175,10 @@ saver = tf.train.Saver()
 if __name__ == "__main__":
     print("Beginning Session")
     #  TRAINING Parameters
+    vocab,batches = getTrainingData()
+    NUM_BATCHES = len(batches)
+    # N_CLASSES = len(vocab)
+
     #Running first session
     with tf.Session() as sess:
         # Initialize variables

@@ -10,7 +10,7 @@ import pickle
 import time
 #import caffeine
 
-from shakespeare import getWordHelpers,weighted_pick, SAVE_DIR,CHECKPOINT_NAME,DATA_NAME,PICKLE_PATH,SUBDIR_NAME
+from shakespeare import weighted_pick,getTrainingData, SAVE_DIR,CHECKPOINT_NAME,DATA_NAME,PICKLE_PATH,SUBDIR_NAME,VOCAB_NAME,BATCHES_NAME
 from shakespeare import NUM_LAYERS, LSTM_SIZE
 print("Beginning Session")
 #  TRAINING Parameters
@@ -20,12 +20,20 @@ model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
 checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
 data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 PRIME_TEXT = "SCENE I."
-TEMPERATURE = 0.5
-NUM_PRED = 100
+TEMPERATURE = 1.0
+NUM_PRED = 1000
 
-WH = getWordHelpers()
+vocab,batches = getTrainingData()
+NUM_BATCHES = len(batches)
+N_CLASSES = len(vocab)
 
-saver = tf.train.import_meta_graph(os.path.join(checkpoint_path,"shakespeare_rec_char_steps.ckpt-21.meta"))
+ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+restore_path = ckpt.model_checkpoint_path
+restore_file = os.path.basename(restore_path)
+ckpt_file = os.path.basename(restore_path)
+already_trained = int(ckpt_file.replace(CHECKPOINT_NAME+"-",""))
+print("EPOCHS TRAINED: {}".format(already_trained))
+saver = tf.train.import_meta_graph(os.path.join(checkpoint_path,"{}-{}.meta".format(CHECKPOINT_NAME,already_trained)))
 
 # We can now access the default graph where all our metadata has been loaded
 graph = tf.get_default_graph()
@@ -76,14 +84,13 @@ with tf.Session(graph=graph) as sess:
     # We no longer use BATCH_SIZE here because
     # in the test method we only want to compare
     # one card output to one card prediction
-    init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
-    preds = [c for c in PRIME_TEXT] + [" "]
+    preds = [c for c in PRIME_TEXT]
     unused_y = np.zeros((1,1))
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
 
     # Begin our primed text Feeding
-    for c in PRIME_TEXT:
-        prime_x = np.array([WH.vocab.vocab.index(c)]).reshape((1,1))
+    for c in PRIME_TEXT[:-1]:
+        prime_x = np.array([vocab.index(c)]).reshape((1,1))
         s, = sess.run([final_state], feed_dict={x: prime_x,
                                                    y: unused_y,
                                                    init_state: state,
@@ -92,7 +99,7 @@ with tf.Session(graph=graph) as sess:
         state = s
 
     # We iterate over every pair of letters in our test batch
-    init_x = np.array([WH.TrainBatches.vocab.vocab.index(' ')]).reshape((1,1))
+    init_x = np.array([vocab.index(PRIME_TEXT[-1])]).reshape((1,1))
     for i in range(0,NUM_PRED):
         s,p = sess.run([final_state, pred], feed_dict={x: init_x,
                                                        y: unused_y,
@@ -102,33 +109,12 @@ with tf.Session(graph=graph) as sess:
 
         # Choose a letter from our vocabulary based on our output probability: p
         for j in p:
-            #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-            pred_index = weighted_pick(j)
-            pred_letter = WH.vocab.vocab[pred_index]
-            if pred_letter != WH.vocab.pad:
-                preds.append(pred_letter)
-                init_x = np.array([[pred_index]])
+            #pred_index = weighted_pick(j)
+            pred_index = np.random.choice(len(vocab),1, p=j[0])[0]
+            pred_letter = vocab[pred_index]
+            preds.append(pred_letter)
+            init_x = np.array([[pred_index]])
         state = s
-
-    for _ in range(10):
-        preds.append("\n")
-        state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-        init_x = np.array([WH.TrainBatches.vocab.go]).reshape((1,1))
-        for i in range(0,NUM_PRED):
-            s,p = sess.run([final_state, pred], feed_dict={x: init_x,
-                                                           y: unused_y,
-                                                           init_state: state,
-                                                           dropout_prob: 1.0,
-                                                           temp:TEMPERATURE})
-            state = s
-            # Choose a letter from our vocabulary based on our output probability: p
-            for j in p:
-                #pred_letter = np.random.choice(WH.vocab.vocab, 1, p=j[0])[0]
-                pred_index = weighted_pick(j)
-                pred_letter = WH.vocab.vocab[pred_index]
-                if pred_letter != WH.vocab.pad:
-                    preds.append(pred_letter)
-                init_x = np.array([[pred_index]])
 
     print(" ") # Spacer
     print("PRED: {}".format(''.join(preds)))
