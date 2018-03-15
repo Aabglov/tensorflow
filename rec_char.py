@@ -67,17 +67,18 @@ except Exception as e:
 
 
 # Network Parameters
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 3e-4
 GRAD_CLIP = 5.0
 LSTM_SIZE = 512
 NUM_LAYERS = 3
-BATCH_SIZE = 50 # Feeding a single character across multiple batches at a time
+BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
 NUM_EPOCHS = 100
+NUM_STEPS = 50
 DISPLAY_STEP = 10#25
 SAVE_STEP = 1
 DECAY_RATE = 0.97
 DECAY_STEP = 5
-DROPOUT_KEEP_PROB = 1.0 #0.5
+DROPOUT_KEEP_PROB = 0.8 #0.5
 TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
@@ -206,12 +207,16 @@ if __name__ == "__main__":
             sum_cost = 0
 
             for batch_ind in range(NUM_BATCHES): # Get a batch
-                batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,1)
+                batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
                 state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
                 batch_cost = 0
                 seq_len = batch.shape[1]
                 for i in range(0,seq_len-1):
+                    # Simulate truncated backprop through time by
+                    # reseting the state after NUM_STEPS
+                    if i != 0 and i % NUM_STEPS == 0:
+                        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)

@@ -7,20 +7,16 @@ import tensorflow as tf
 import os
 import word_helpers
 import pickle
+from rec_char import weighted_pick,SAVE_DIR,CHECKPOINT_NAME,DATA_NAME,PICKLE_PATH,SUBDIR_NAME
+from rec_char import NUM_LAYERS, LSTM_SIZE
+print("Beginning Session")
 
-# PATHS -- absolute
 dir_path = os.path.dirname(os.path.realpath(__file__))
-checkpoint_path = os.path.join(dir_path,"saved","mtg")#,"mtg_rec_char_steps.ckpt")
-data_path = os.path.join(dir_path,"data","cards_tokenized.txt")
-
-# Load mtg tokenized data
-# Special thanks to mtgencode: https://github.com/billzorn/mtgencode
-with open(data_path,"r") as f:
-    # Each card occupies its own line in this tokenized version
-    raw_txt = f.read()#.split("\n")
-
+model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
+checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
+data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 try:
-    with open(os.path.join(dir_path,"data","mtg_tokenized_wh.pkl"),"rb") as f:
+    with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
         WH = pickle.load(f)
 except Exception as e:
     print(e)
@@ -32,130 +28,122 @@ except Exception as e:
     # I think they both:
     #   1). Are unlikely to appear in regular data, let alone cleaned data.
     #   2). Look awesome.
-    vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
-             '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
-             '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-             "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac',u'\xf8',u'\xa4']
-
+    vocab = "1 2 3 4 5 6 7 8 9 0".split(" ")
+    vocab += "a b c d e f g h i j k l m n o p q r s t u v w x y z".split(" ")
+    vocab += "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split(" ")
+    vocab += ['|', ' ', '&', '^', '/', '{', '}', ',', ':', '.', '\\',  '@', '+', '"', "'", '-', '*', '%', '[', '=', ']', '~']
+    vocab += [u'\xbb',  u'\xac', u'\xf8', u'\xa4', u'\u00BB']
+    # Load mtg tokenized data
+    # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
+    with open(data_path,"r") as f:
+         # Each card occupies its own line in this tokenized version
+         raw_txt = f.read()#.split("\n")
     WH = word_helpers.WordHelper(raw_txt, vocab)
-    # Save our WordHelper
-    with open(os.path.join(dir_path,"data","mtg_tokenized_wh.pkl"),"wb") as f:
-        pickle.dump(WH,f)
+    #WH = word_helpers.JSONHelper(data_path,vocab)
 
 
-args = {
-    'learning_rate':0.000,#0.001
-    'decay_rate':1.0,
-    'grad_clip':0.0,
-    'n_input':WH.vocab.vocab_size,
-    'n_classes':WH.vocab.vocab_size,
-    'lstm_size':512,
-    'num_layers':3,
-    'num_steps':1
-}
-# Network Parameters
-LEARNING_RATE = args['learning_rate']
-DECAY_RATE = args['decay_rate']
-GRAD_CLIP = args['grad_clip']
-N_INPUT = args['n_input']
-N_CLASSES = args['n_classes']
-LSTM_SIZE = args['lstm_size']
-NUM_LAYERS = args['num_layers']
-NUM_STEPS = args['num_steps']
 
-graph = tf.Graph()
-with graph.as_default():
-    # Placeholders
-    x = tf.placeholder(tf.int32, [None, NUM_STEPS], name='input_placeholder')
-    y = tf.placeholder(tf.int32, [None, NUM_STEPS], name='labels_placeholder')
-    dropout_prob = tf.placeholder(tf.float32)
+dir_path = os.path.dirname(os.path.realpath(__file__))
+model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
+checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
+data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
-    # Our initial state placeholder:
-    # NUM_LAYERS -- the number of layers used by our stacked LSTM
-    # 2 -- 2 states for each layer (output,hidden)
-    # None -- This will be our batch_size which is flexible
-    # LSTM_SIZE -- the size of our hidden layers
-    init_state = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='state_placeholder')
-    # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
-    l = tf.unstack(init_state, axis=0)
-    rnn_tuple_state = tuple(
-        [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(NUM_LAYERS)]
-    )
+#PRIME_TEXT = "»|5creature|4legendary|6eldrazi|7|8"
+#PRIME_TEXT = u"»|5planeswalker|4|6"
+PRIME_TEXT = "»|5creature|4|6"
+#PRIME_TEXT = u"»|5planeswalker|4|6serra|7"
 
-    # Get dynamic batch_size
-    batch_size = tf.shape(x)[0]
+TEMPERATURE = 0.5
+NUM_PRED = 200
 
-    #Inputs
-    embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
-    rnn_inputs = tf.nn.embedding_lookup(embedding, x)
+vocab = WH.vocab.vocab
+N_CLASSES = len(vocab)
 
-    # RNN
-    lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
-    dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
-    stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
-    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
-                                                 inputs=rnn_inputs,
-                                                 initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+ckpt = tf.train.get_checkpoint_state(checkpoint_path)
+restore_path = ckpt.model_checkpoint_path
+restore_file = os.path.basename(restore_path)
+ckpt_file = os.path.basename(restore_path)
+already_trained = int(ckpt_file.replace(CHECKPOINT_NAME+"-",""))
+print("EPOCHS TRAINED: {}".format(already_trained))
+saver = tf.train.import_meta_graph(os.path.join(checkpoint_path,"{}-{}.meta".format(CHECKPOINT_NAME,already_trained)))
 
-    #Predictions, loss, training step
-    with tf.variable_scope('softmax'):
-        W = tf.get_variable('W', [LSTM_SIZE, N_CLASSES])
-        b = tf.get_variable('b', [N_CLASSES], initializer=tf.constant_initializer(0.0))
-    logits = tf.reshape(
-                tf.matmul(tf.reshape(rnn_outputs, [-1, LSTM_SIZE]), W) + b,
-                [-1,batch_size, N_CLASSES])
-    pred = tf.nn.softmax(logits)
+# We can now access the default graph where all our metadata has been loaded
+graph = tf.get_default_graph()
 
-    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits)
-    cost = tf.reduce_mean(losses)
+lr = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="model/learning_rate")[0]
 
-    lr = tf.Variable(0.0, trainable=False)
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), GRAD_CLIP)
-    with tf.name_scope('optimizer'):
-        op = tf.train.AdamOptimizer(lr)
-    optimizer = op.apply_gradients(zip(grads, tvars))
+final_state = graph.get_tensor_by_name('model/final_state:0')
+pred = graph.get_tensor_by_name('model/pred:0')
+x = graph.get_tensor_by_name('model/input_placeholder:0')
+init_state = graph.get_tensor_by_name('model/state_placeholder:0')
+dropout_prob = graph.get_tensor_by_name('model/dropout:0')
+temp = graph.get_tensor_by_name('model/temp:0')
 
-    # Initialize variables
-    init = tf.global_variables_initializer()
-    # 'Saver' op to save and restore all the variables
-    saver = tf.train.Saver()
-
-DROPOUT_KEEP_PROB = 0.9
-print("Beginning Model Initialization")
 #Running first session
 with tf.Session(graph=graph) as sess:
     # Initialize variables
-    sess.run(init)
+    #sess.run(init)
+    sess.run(tf.global_variables_initializer())
 
     try:
         ckpt = tf.train.get_checkpoint_state(checkpoint_path)
-        saver.restore(sess, ckpt.model_checkpoint_path)
-        print("Model restored from file: %s" % checkpoint_path)
+        # A quirk of training on a different machine:
+        # the model_checkpoint_path is an absolute path and
+        # makes restoring fail because it doesn't match the path here.
+        # To avoid this, we extract the checkpoint file name
+        # then recreate the correct path and restore from there.
+        restore_path = ckpt.model_checkpoint_path
+        restore_file = os.path.basename(restore_path)
+        ckpt_file = os.path.basename(restore_path)
+        already_trained = int(ckpt_file.replace(CHECKPOINT_NAME+"-",""))
+        new_path = os.path.join(dir_path,"saved",SAVE_DIR,restore_file)
+        saver.restore(sess, new_path)#ckpt.model_checkpoint_path)
+        print("Model restored from file: %s" % model_path)
+        print("__________________________________________")
     except Exception as e:
         print("Model restore failed {}".format(e))
+        print("__________________________________________")
 
-    seed = u"»|5creature|4legendary|6eldrazi|7|8"
-    #seed = u"»|5planeswalker|4|6"
-    #seed = u"»|5planeswalker|4|6serra|7"
+
+    # Set learning rate
+    sess.run(tf.assign(lr,0))
+
+    # Test model
+    preds = []
+    true = []
+
+    # We no longer use BATCH_SIZE here because
+    # in the test method we only want to compare
+    # one card output to one card prediction
+    preds = [c for c in PRIME_TEXT]
     state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
-    sample = [seed[0]]
-    start = [WH.vocab.char2id(seed[0])]
-    for i in range(1,len(seed)):
-        s = sess.run(final_state, feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: 1.0})
-        start = [WH.vocab.char2id(seed[i])]
-        sample.append(seed[i])
+
+    # Begin our primed text Feeding
+    for c in PRIME_TEXT[:-1]:
+        prime_x = np.array([vocab.index(c)]).reshape((1,1))
+        s, = sess.run([final_state], feed_dict={x: prime_x,
+                                                   init_state: state,
+                                                   dropout_prob: 1.0,
+                                                   temp:TEMPERATURE})
         state = s
 
-    #for _ in range(100):
-    pred_letter = ""
-    while pred_letter != WH.vocab.vocab[-1]:
-        s, p = sess.run([final_state, pred], feed_dict={x: np.array(start).reshape((1,1)), init_state: state, dropout_prob: DROPOUT_KEEP_PROB})
-        pred_letter = np.random.choice(WH.vocab.vocab, 1, p=p[0][0])[0]
-        pred_id = WH.vocab.char2id(pred_letter)
-        start = [pred_id]
+    # We iterate over every pair of letters in our test batch
+    init_x = np.array([vocab.index(PRIME_TEXT[-1])]).reshape((1,1))
+    for i in range(0,NUM_PRED):
+        s,p = sess.run([final_state, pred], feed_dict={x: init_x,
+                                                       init_state: state,
+                                                       dropout_prob: 1.0,
+                                                       temp:TEMPERATURE})
+
+        # Choose a letter from our vocabulary based on our output probability: p
+        for j in p:
+            #pred_index = weighted_pick(j)
+            pred_index = np.random.choice(len(vocab),1, p=j[0])[0]
+            pred_letter = vocab[pred_index]
+            preds.append(pred_letter)
+            init_x = np.array([[pred_index]])
         state = s
-        sample.append(pred_letter)
-        if len(sample) > 1000:
-            break
-    print("SAMPLE: {}".format(''.join(sample)))
+
+    print(" ") # Spacer
+    print("PRED: {}".format(''.join(preds)))
+    #print("TRUE: {}".format(''.join(true)))
