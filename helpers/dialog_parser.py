@@ -17,7 +17,8 @@ PAD = u'\xac'
 EOS = u'\xf8'
 SPLIT = u'\xa4'
 
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+#DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+DIR_PATH = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1]) # go up one directory
 DATA_PATH = os.path.join(DIR_PATH,"data","dialog")
 STRUCTURE_PATH = os.path.join(DATA_PATH,"movie_conversations.txt")
 LINES_PATH = os.path.join(DATA_PATH,"movie_lines.txt")
@@ -35,7 +36,7 @@ SYMBOLS = ["~", "`", "!", "<", ">", ".", ",", \
            # We don't want to have every 3 digit number as its own word.
            "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
 
-VOCAB_TOP = 30000 
+VOCAB_TOP = 30000
 
 class Conversation:
     def __init__(self,subject1,subject2,lines):

@@ -5,7 +5,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import os
-import word_helpers
+from helpers import word_helpers
 import pickle
 import time
 import caffeine

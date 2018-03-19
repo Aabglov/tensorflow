@@ -5,7 +5,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import os
-import word_helpers
+from helpers import word_helpers
 import pickle
 from rec_char import weighted_pick,SAVE_DIR,CHECKPOINT_NAME,DATA_NAME,PICKLE_PATH,SUBDIR_NAME
 from rec_char import NUM_LAYERS, LSTM_SIZE
@@ -41,8 +41,6 @@ except Exception as e:
     WH = word_helpers.WordHelper(raw_txt, vocab)
     #WH = word_helpers.JSONHelper(data_path,vocab)
 
-
-
 dir_path = os.path.dirname(os.path.realpath(__file__))
 model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
 checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
@@ -53,7 +51,7 @@ data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 PRIME_TEXT = "»|5creature|4|6"
 #PRIME_TEXT = u"»|5planeswalker|4|6serra|7"
 
-TEMPERATURE = 0.5
+TEMPERATURE = 1.0#0.5
 NUM_PRED = 200
 
 vocab = WH.vocab.vocab
@@ -129,19 +127,20 @@ with tf.Session(graph=graph) as sess:
 
     # We iterate over every pair of letters in our test batch
     init_x = np.array([vocab.index(PRIME_TEXT[-1])]).reshape((1,1))
-    for i in range(0,NUM_PRED):
+    pred_letter = " "
+    #for i in range(0,NUM_PRED):
+    while pred_letter != "¤":
         s,p = sess.run([final_state, pred], feed_dict={x: init_x,
                                                        init_state: state,
                                                        dropout_prob: 1.0,
                                                        temp:TEMPERATURE})
 
         # Choose a letter from our vocabulary based on our output probability: p
-        for j in p:
-            #pred_index = weighted_pick(j)
-            pred_index = np.random.choice(len(vocab),1, p=j[0])[0]
-            pred_letter = vocab[pred_index]
-            preds.append(pred_letter)
-            init_x = np.array([[pred_index]])
+        #pred_index = weighted_pick(j)
+        pred_index = np.random.choice(len(vocab),1, p=p[0][0])[0]
+        pred_letter = vocab[pred_index]
+        preds.append(pred_letter)
+        init_x = np.array([[pred_index]])
         state = s
 
     print(" ") # Spacer

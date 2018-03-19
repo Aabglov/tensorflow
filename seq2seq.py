@@ -1,10 +1,9 @@
 import numpy as np
 import tensorflow as tf
-from utils import save,load
+from helpers.utils import save,load
 import os
 import time
-import word_helpers
-import dialog_parser
+from helpers import word_helpers, dialog_parser
 import caffeine
 
 #from tensorflow.examples.tutorials.mnist import input_data
