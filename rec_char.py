@@ -205,6 +205,7 @@ if __name__ == "__main__":
 
             start = time.time()
             sum_cost = 0
+            count = 0
 
             for batch_ind in range(NUM_BATCHES): # Get a batch
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
@@ -213,10 +214,11 @@ if __name__ == "__main__":
                 batch_cost = 0
                 seq_len = batch.shape[1]
                 for i in range(0,seq_len-1):
+                    count += 1
                     # Simulate truncated backprop through time by
                     # reseting the state after NUM_STEPS
-                    if i != 0 and i % NUM_STEPS == 0:
-                        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+                    if count != 0 and count % NUM_STEPS == 0:
+                        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE)) # reset state
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)

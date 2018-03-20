@@ -67,42 +67,49 @@ replace = {'\ufeff':REMOVE,
 # The plan is to separate the rap lyrics into songs,
 # then split them by line in training
 # and feed them in character by character
+def getSongs():
+    with open(os.path.join(DATA_PATH,"ohhla.txt"),"r") as f:
+        raw = f.read()
 
-with open(os.path.join(DATA_PATH,"ohhla.txt"),"r") as f:
-    raw = f.read()
+    for k,v in replace.items():
+        raw = raw.replace(k,v)
 
-for k,v in replace.items():
-    raw = raw.replace(k,v)
+    # TESTING TO MAKE SURE MY HARD CODED VOCABULARY IS CORRECT
+    if DEBUG:
+        vocab_test = list(set([r for r in raw] + CUSTOM_CHARS))
+        print("VOCAB TEST:")
+        full = vocab + unsure + foreign + ["\n"]
+        print(set(full) == set(vocab_test))
+        print(len(vocab_test))
+        print(len(full))
+        for f in full:
+            if f not in vocab_test:
+                print("NOT IN VOCAB_TEST: |{}|".format(f))
+        for v in vocab_test:
+            if v not in full:
+                print("NOT IN FULL: |{}|".format(v))
+        for f in full:
+            if full.count(f) > 1:
+                print("COUNT: |{}|".format(f))
 
-# TESTING TO MAKE SURE MY HARD CODED VOCABULARY IS CORRECT
-if DEBUG:
-    vocab_test = list(set([r for r in raw] + CUSTOM_CHARS))
-    print("VOCAB TEST:")
-    full = vocab + unsure + foreign + ["\n"]
-    print(set(full) == set(vocab_test))
-    print(len(vocab_test))
-    print(len(full))
-    for f in full:
-        if f not in vocab_test:
-            print("NOT IN VOCAB_TEST: |{}|".format(f))
-    for v in vocab_test:
-        if v not in full:
-            print("NOT IN FULL: |{}|".format(v))
-    for f in full:
-        if full.count(f) > 1:
-            print("COUNT: |{}|".format(f))
+    sub_raw = re.sub(REGEX_SEARCH, SPACER, raw)
+    songs_raw = sub_raw.split(SPACER)
+    songs = [s.strip() for s in songs_raw if s.strip() != ""]
+    print("Number of songs: {}".format(len(songs)))
+    domestic_songs = []
+    unsure_songs = []
+    foreign_songs = []
+    for s in songs:
+        if set(s).intersection(foreign) == set() and set(s).intersection(unsure) == set():
+            domestic_songs.append(s)
+        elif set(s).intersection(foreign) == set() and set(s).intersection(unsure) != set():
+            unsure_songs.append(s)
+        else:
+            foreign_songs.append(s)
+    print("Number of songs WITHOUT non-english symbols: {}".format(len(domestic_songs)))
+    print("Number of songs WITH unsure symbols: {}".format(len(unsure_songs)))
+    print("Number of songs WITH non-english symbols: {}".format(len(foreign_songs)))
+    return songs,vocab
 
-sub_raw = re.sub(REGEX_SEARCH, SPACER, raw)
-songs_raw = sub_raw.split(SPACER)
-songs = [s.strip() for s in songs_raw if s.strip() != ""]
-print("Number of songs: {}".format(len(songs)))
-domestic_songs = []
-foreign_songs = []
-for s in songs:
-    if set(s).intersection(foreign) == set():
-        domestic_songs.append(s)
-    else:
-        foreign_songs.append(s)
-print("Number of songs WITHOUT non-english symbols: {}".format(len(domestic_songs)))
-print("Number of songs WITH non-english symbols: {}".format(len(foreign_songs)))
-print(foreign_songs[0])
+if __name__ == "__main__":
+    s,v = getSongs()

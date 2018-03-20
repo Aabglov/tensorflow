@@ -51,7 +51,7 @@ data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 PRIME_TEXT = "»|5creature|4|6"
 #PRIME_TEXT = u"»|5planeswalker|4|6serra|7"
 
-TEMPERATURE = 1.0#0.5
+TEMPERATURE = 1.2
 NUM_PRED = 200
 
 vocab = WH.vocab.vocab
@@ -128,8 +128,8 @@ with tf.Session(graph=graph) as sess:
     # We iterate over every pair of letters in our test batch
     init_x = np.array([vocab.index(PRIME_TEXT[-1])]).reshape((1,1))
     pred_letter = " "
-    #for i in range(0,NUM_PRED):
-    while pred_letter != "¤":
+    #for i in range(0,100):
+    while pred_letter != "¤" and len(preds) < 1000:
         s,p = sess.run([final_state, pred], feed_dict={x: init_x,
                                                        init_state: state,
                                                        dropout_prob: 1.0,
