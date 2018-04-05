@@ -266,17 +266,20 @@ class WordHelper:
         if not vocab_list:
             # Create our character vocaulary
             self.vocab_list = []
+            self.provided_vocab = False
         else:
             self.vocab_list = vocab_list
+            self.provided_vocab = True
 
         # for each row in raw_txt
         for r in rows:
             print("row {} of {} complete".format(count,total))
             count += 1
             # for each letter in that row
-            for l in r:
-                if l not in self.vocab_list:
-                    self.vocab_list.append(l)
+            if not self.provided_vocab:
+                for l in r:
+                    if l not in self.vocab_list:
+                        self.vocab_list.append(l)
 
             # Skip empty lines
             if r.replace(" ","") != "":

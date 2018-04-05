@@ -40,10 +40,11 @@ try:
         WH = pickle.load(f)
 except Exception as e:
     print(e)
-    songs,vocab = rap_parser.getSongs()
-    WH = word_helpers.WordHelper(raw_txt,vocab_list=vocab)
+    songs,parsed_vocab = rap_parser.getSongs()
+    raw_txt = "\n".join(songs)
+    print("parsed vocab length: {}".format(len(parsed_vocab)))
+    WH = word_helpers.WordHelper(raw_txt,vocab_list=parsed_vocab)
     #WH = word_helpers.JSONHelper(data_path,vocab)
-
 
     # Save our WordHelper
     with open(os.path.join(checkpoint_path,PICKLE_PATH),"wb") as f:
@@ -66,8 +67,8 @@ DROPOUT_KEEP_PROB = 0.8 #0.5
 TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
-PRIME_TEXT = u"»|"#"|5planeswalker|4|6"
-N_CLASSES = 89
+PRIME_TEXT = u"»"
+N_CLASSES = 98
 vocab = WH.vocab.vocab
 
 def weighted_pick(weights):
