@@ -192,6 +192,8 @@ if __name__ == "__main__":
             sum_cost = 0
             count = 0
 
+            
+
             for batch_ind in range(NUM_BATCHES): # Get a batch
                 batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
                 # Reset state value
