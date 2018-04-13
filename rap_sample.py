@@ -44,9 +44,9 @@ except Exception as e:
         pickle.dump(WH,f)
 
 
-PRIME_TEXT = "»Well, well, well"
+PRIME_TEXT = "»I"
 TEMPERATURE = 1.0
-NUM_PRED = 1000
+NUM_PRED = 300
 
 vocab = WH.TrainBatches.vocab.vocab
 N_CLASSES = len(vocab)
@@ -124,6 +124,7 @@ with tf.Session(graph=graph) as sess:
 
     # We iterate over every pair of letters in our test batch
     init_x = np.array([vocab.index(PRIME_TEXT[-1])]).reshape((1,1))
+    reset_x = np.array([vocab.index("»")]).reshape((1,1))
     for i in range(0,NUM_PRED):
         s,p = sess.run([final_state, pred], feed_dict={x: init_x,
                                                        y: unused_y,
@@ -139,6 +140,11 @@ with tf.Session(graph=graph) as sess:
             preds.append(pred_letter)
             init_x = np.array([[pred_index]])
         state = s
+        if pred_letter == "¤":
+            preds.append("\n")
+            state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
+            init_x = reset_x
+
 
     print(" ") # Spacer
     print("PRED: {}".format(''.join(preds)))
