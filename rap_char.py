@@ -33,7 +33,7 @@ model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
 checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
 data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
-
+MAX_SEQ_LEN = 100
 
 try:
     with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
@@ -47,25 +47,33 @@ except Exception as e:
     # Length investigation
     # Looks like there are only about 1000 songs (out of 19k)
     # that contain batches 100 words long or longer
-    len_dict = {}
-    for s in RH.songs:
-        for line in s:
-            l = len(line)
-            if l not in len_dict:
-                len_dict[l] = [line]
-            else:
-                len_dict[l].append(line)
-    k = list(len_dict.keys())
-    k.sort()
-    print(k)
-    total = 0
-    for i in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 127, 128, 129, 130, 131, 133, 134, 136, 140, 142, 143, 144, 146, 147, 148, 150, 151, 152, 153, 154, 161, 162, 163, 170, 171, 172, 173, 180, 187, 198, 202, 203, 209, 213, 215, 238, 245, 249, 264, 312, 316, 565]:
-        total += len(len_dict[i])
-        print(i,len(len_dict[i]))
-    print("TOTAL: {}".format(total))
-    HODOR
-
-
+    REMOVE_BIG_SEQ = True
+    if REMOVE_BIG_SEQ:
+        len_dict = {}
+        songs_to_remove = []
+        for i in range(len(RH.songs)):
+            s = RH.songs[i]
+            for line in s:
+                l = len(line)
+                if l not in len_dict:
+                    len_dict[l] = [line]
+                else:
+                    len_dict[l].append(line)
+                if l > MAX_SEQ_LEN:
+                    songs_to_remove.append(i)
+        k = list(len_dict.keys())
+        k.sort()
+        # total = 0
+        # for i in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 127, 128, 129, 130, 131, 133, 134, 136, 140, 142, 143, 144, 146, 147, 148, 150, 151, 152, 153, 154, 161, 162, 163, 170, 171, 172, 173, 180, 187, 198, 202, 203, 209, 213, 215, 238, 245, 249, 264, 312, 316, 565]:
+        #     total += len(len_dict[i])
+        # print("TOTAL: {}".format(total))
+        songs_to_remove = list(set(songs_to_remove))
+        print("Number of songs to remove: {}".format(len(songs_to_remove)))
+        print("Number of songs before removal: {}".format(len(RH.songs)))
+        songs_to_remove.sort()
+        for i in songs_to_remove[::-1]:
+            del RH.songs[i]
+        print("Number of songs after removal: {}".format(len(RH.songs)))
 
     print("parsed vocab length: {}".format(len(parsed_vocab)))
 
@@ -79,7 +87,10 @@ LEARNING_RATE = 3e-4
 GRAD_CLIP = 5.0
 LSTM_SIZE = 512
 NUM_LAYERS = 3
-BATCH_SIZE = 100 # Feeding a single character across multiple batches at a time
+# Since songs can have differing numbers of lines
+# it doesn't make sense to have multiple songs represented in a batchself.
+# At least not yet.
+BATCH_SIZE = 1
 NUM_EPOCHS = 100
 NUM_STEPS = 100 # 50
 DISPLAY_STEP = 10#25
@@ -214,21 +225,21 @@ if __name__ == "__main__":
             start = time.time()
             sum_cost = 0
             count = 0
-            state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+            state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
 
             for batch_ind in range(NUM_BATCHES): # Get a batch
-                batch,reset_state = RH.next()
+                batch,reset_state = RH.next(MAX_SEQ_LEN)
                 # Reset state value
                 batch_cost = 0
-                seq_len = batch.shape[1]
-                for i in range(0,seq_len-1):
+                for i in range(0,MAX_SEQ_LEN-1):
                     count += 1
                     # Simulate truncated backprop through time by
                     # reseting the state after NUM_STEPS
                     if count != 0 and count % NUM_STEPS == 0:
-                        state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE)) # reset state
-                    batch_x = batch[:,i].reshape((BATCH_SIZE,1))
-                    batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
+                        state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE)) # reset state
+                    batch_x = np.array(batch[i]).reshape((BATCH_SIZE,1))
+                    batch_y = np.array(batch[(i+1)]).reshape((BATCH_SIZE,1))
+
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
                                                                                   y: batch_y,
@@ -240,9 +251,9 @@ if __name__ == "__main__":
                     batch_cost += c
 
                 if reset_state:
-                    state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+                    state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
 
-                print("     batch {} of {} processed, cost: {}, epoch {}".format(batch_ind,NUM_BATCHES,batch_cost/(seq_len-1), epoch))
+                print("     batch {} of {} processed, cost: {}, epoch {}".format(batch_ind,NUM_BATCHES,batch_cost/(MAX_SEQ_LEN-1), epoch))
                 # Display logs per epoch step
                 if batch_ind % DISPLAY_STEP == 0:
                     # Test model

@@ -67,6 +67,9 @@ class SongBatcher:
     def __init__(self,songs,vocab):
         # Add data
         self.songs = [s.split("\n") for s in songs] # Turn each song into a list of lines
+        for s in self.songs: # Add GO and EOS char to each song
+            s = self.vocab.go_char + s + self.vocab.eos_char
+
         self.num_batches = sum([len(s) for s in songs])
         # Set up vocabulary
         self.vocab = Vocabulary(vocab)
@@ -82,9 +85,12 @@ class SongBatcher:
     def current_batch(self):
         return self.current_song()[self.batch_index]
 
-    def next(self):
+    def next(self,max_len=100):
         next_batch_raw = self.songs[self.song_index][self.batch_index]
         next_batch = [self.vocab.char2id(n) for n in next_batch_raw]
+        if len(next_batch) < max_len:
+            pad_len = (max_len - len(next_batch))
+            next_batch += [self.vocab.pad] * pad_len
         new_song = False
         self.batch_index += 1
         if self.batch_index >= len(self.current_song()):
