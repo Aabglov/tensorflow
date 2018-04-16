@@ -5,7 +5,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import os
-from helpers import word_helpers, rap_parser
+from helpers import rap_parser, rap_helper
 import pickle
 import time
 import caffeine
@@ -25,7 +25,7 @@ import caffeine
 SAVE_DIR = "rap"
 CHECKPOINT_NAME = "rap_char_steps.ckpt"
 DATA_NAME = "ohhla.txt"
-PICKLE_PATH = "rap_wh.pkl"
+PICKLE_PATH = "rap_rh.pkl"
 SUBDIR_NAME = "rap"
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -37,18 +37,41 @@ data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
 try:
     with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
-        WH = pickle.load(f)
+        RH = pickle.load(f)
 except Exception as e:
     print(e)
     songs,parsed_vocab = rap_parser.getSongs()
-    raw_txt = "\n".join(songs)
-    print("parsed vocab length: {}".format(len(parsed_vocab)))
-    WH = word_helpers.WordHelper(raw_txt,vocab_list=parsed_vocab)
-    #WH = word_helpers.JSONHelper(data_path,vocab)
 
-    # Save our WordHelper
+    RH = rap_helper.SongBatcher(songs,parsed_vocab)
+
+    # Length investigation
+    # Looks like there are only about 1000 songs (out of 19k)
+    # that contain batches 100 words long or longer
+    len_dict = {}
+    for s in RH.songs:
+        for line in s:
+            l = len(line)
+            if l not in len_dict:
+                len_dict[l] = [line]
+            else:
+                len_dict[l].append(line)
+    k = list(len_dict.keys())
+    k.sort()
+    print(k)
+    total = 0
+    for i in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 127, 128, 129, 130, 131, 133, 134, 136, 140, 142, 143, 144, 146, 147, 148, 150, 151, 152, 153, 154, 161, 162, 163, 170, 171, 172, 173, 180, 187, 198, 202, 203, 209, 213, 215, 238, 245, 249, 264, 312, 316, 565]:
+        total += len(len_dict[i])
+        print(i,len(len_dict[i]))
+    print("TOTAL: {}".format(total))
+    HODOR
+
+
+
+    print("parsed vocab length: {}".format(len(parsed_vocab)))
+
+    # Save our Rap Helper
     with open(os.path.join(checkpoint_path,PICKLE_PATH),"wb") as f:
-        pickle.dump(WH,f)
+        pickle.dump(RH,f)
 
 
 # Network Parameters
@@ -69,7 +92,7 @@ NUM_PRED = 50
 already_trained = 0
 PRIME_TEXT = u"»"
 N_CLASSES = 98
-vocab = WH.vocab.vocab
+vocab = RH.vocab.vocab
 
 def weighted_pick(weights):
     t = np.cumsum(weights)
@@ -155,7 +178,7 @@ if __name__ == "__main__":
     print("Beginning Session")
     #  TRAINING Parameters
     #vocab,batches = getTrainingData()
-    NUM_BATCHES = WH.TrainBatches.num_batches // BATCH_SIZE
+    NUM_BATCHES = RH.num_batches
     # N_CLASSES = len(vocab)
 
     #Running first session
@@ -191,13 +214,11 @@ if __name__ == "__main__":
             start = time.time()
             sum_cost = 0
             count = 0
-
-            
+            state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
 
             for batch_ind in range(NUM_BATCHES): # Get a batch
-                batch = WH.TrainBatches.next_card_batch(BATCH_SIZE,NUM_STEPS)
+                batch,reset_state = RH.next()
                 # Reset state value
-                state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
                 batch_cost = 0
                 seq_len = batch.shape[1]
                 for i in range(0,seq_len-1):
@@ -217,6 +238,10 @@ if __name__ == "__main__":
                     state = s
                     sum_cost += c
                     batch_cost += c
+
+                if reset_state:
+                    state = np.zeros((NUM_LAYERS,2,len(batch),LSTM_SIZE))
+
                 print("     batch {} of {} processed, cost: {}, epoch {}".format(batch_ind,NUM_BATCHES,batch_cost/(seq_len-1), epoch))
                 # Display logs per epoch step
                 if batch_ind % DISPLAY_STEP == 0:
