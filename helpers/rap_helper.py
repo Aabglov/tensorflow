@@ -67,9 +67,6 @@ class SongBatcher:
     def __init__(self,songs,vocab):
         # Add data
         self.songs = [s.split("\n") for s in songs] # Turn each song into a list of lines
-        for s in self.songs: # Add GO and EOS char to each song
-            s = self.vocab.go_char + s + self.vocab.eos_char
-
         self.num_batches = sum([len(s) for s in songs])
         # Set up vocabulary
         self.vocab = Vocabulary(vocab)
@@ -78,6 +75,9 @@ class SongBatcher:
         self.num_songs = len(self.songs)
         # index within song
         self.batch_index = 0
+
+        for s in self.songs: # Add GO and EOS char to each song
+            s = [self.vocab.go_char] + s + [self.vocab.eos_char]
 
     def current_song(self):
         return self.songs[self.song_index]
