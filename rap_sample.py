@@ -18,7 +18,7 @@ print("Beginning Session")
 SAVE_DIR = "rap"
 CHECKPOINT_NAME = "rap_char_steps.ckpt"
 DATA_NAME = "ohhla.txt"
-PICKLE_PATH = "rap_wh.pkl"
+PICKLE_PATH = "rap_rh.pkl"
 SUBDIR_NAME = "rap"
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -27,28 +27,14 @@ checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
 data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
 
-
-try:
-    with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
-        WH = pickle.load(f)
-except Exception as e:
-    print(e)
-    songs,parsed_vocab = rap_parser.getSongs()
-    raw_txt = "\n".join(songs)
-    print("parsed vocab length: {}".format(len(parsed_vocab)))
-    WH = word_helpers.WordHelper(raw_txt,vocab_list=parsed_vocab)
-    #WH = word_helpers.JSONHelper(data_path,vocab)
-
-    # Save our WordHelper
-    with open(os.path.join(checkpoint_path,PICKLE_PATH),"wb") as f:
-        pickle.dump(WH,f)
-
+with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
+    RH = pickle.load(f)
 
 PRIME_TEXT = "»I"
 TEMPERATURE = 1.0
 NUM_PRED = 300
 
-vocab = WH.TrainBatches.vocab.vocab
+vocab = RH.vocab.vocab
 N_CLASSES = len(vocab)
 
 ckpt = tf.train.get_checkpoint_state(checkpoint_path)
@@ -140,6 +126,9 @@ with tf.Session(graph=graph) as sess:
             preds.append(pred_letter)
             init_x = np.array([[pred_index]])
         state = s
+        if pred_letter == "ø":
+            preds.append("\n")
+            
         if pred_letter == "¤":
             preds.append("\n")
             state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
