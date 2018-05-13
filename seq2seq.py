@@ -124,7 +124,7 @@ padded_target= [padSequence(t,pad_val) for t in target_seq]
 
 encoder_input = np.asarray(padded_input,dtype='int32')
 decoder_target = np.asarray(padded_target,dtype='int32')
-
+N_CLASSES = len(vocab)
 if DEBUG:
     print(encoder_input.shape)
     print(decoder_target.shape)
@@ -138,10 +138,12 @@ if DEBUG:
 with tf.name_scope('input'):
     # Placeholders
     x = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='input_placeholder')
+    dec_in = tf.placeholder(tf.int32, [None, 1], name='decoder_input')
     y = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='labels_placeholder')
     #dropout_prob = tf.placeholder(tf.float32)
     # Our initial state placeholder:
     init_state_placeholder = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='encoder_state_placeholder')
+    embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE],dtype=tf.float32)
 
 # Recurrent Neural Network
 def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
@@ -165,6 +167,10 @@ def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
                                                      initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
         return rnn_outputs,final_state
 
+def embed(input_tensor):
+    with tf.name_scope('embedding'):
+        rnn_inputs = tf.nn.embedding_lookup(embedding, input_tensor)
+    return rnn_inputs
 
 # ENCODER
 def encoder(input_tensor,init_state):
@@ -173,12 +179,11 @@ def encoder(input_tensor,init_state):
     num_classes = len(vocab)
     dropout_prob = 0.3
 
+    rnn_inputs = embed(input_tensor)
+
     #Inputs
     with tf.name_scope('encoder'):
-        embedding = tf.get_variable("embedding", [num_classes, EMBEDDING_DIM])
-        rnn_inputs = tf.nn.embedding_lookup(embedding, input_tensor)
-
-    rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'encoder',dropout_prob)
+        rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'encoder',dropout_prob)
 
     return rnn_out,rnn_state
 
@@ -187,15 +192,19 @@ def decoder(input_tensor,init_state):
     num_layers = NUM_LAYERS
     lstm_size = LSTM_SIZE
     dropout_prob = 0.3
-    rnn_out,rnn_state = RNN(input_tensor,init_state,num_layers,lstm_size,'decoder',dropout_prob)
-    dense_out = tf.layers.dense(rnn_out,len(vocab),activation=None,use_bias=True)
+
+    rnn_inputs = embed(input_tensor)
+
+    with tf.name_scope('decoder'):
+        rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'decoder',dropout_prob)
+        dense_out = tf.layers.dense(rnn_out,len(vocab),activation=None,use_bias=True)
 
     return dense_out
 
 with tf.variable_scope("model") as scope:
     encoder_out,encoder_state = encoder(x,init_state_placeholder)
     # decoder_out are our logits
-    decoder_out = decoder(encoder_out, encoder_state)
+    decoder_out = decoder(dec_in, encoder_state)
     pred = tf.nn.softmax(decoder_out)
 
 # Define loss function(s)
@@ -246,12 +255,21 @@ if __name__ == "__main__":
         for epoch in range(already_trained,already_trained+MAX_STEPS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
+            dec_input = np.array([[vocab_lookup[GO]]])
             for i in range(0,NUM_SAMPLES//BATCH_SIZE):
                 # Reset state value
                 new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
                 # Generate a batch
                 batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
                 batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+
+                print(batch_x.shape)
+                print(batch_y.shape)
+                print(dec_input.shape)
+
+                for b in batch_x[0]:
+                    print(reverse_vocab_lookup[b])
+                HODOR
 
                 # print(encoder_input.shape)
                 # print(decoder_target.shape)
@@ -266,7 +284,7 @@ if __name__ == "__main__":
                 # HODOR
 
                 # Run optimization op (backprop) and cost op (to get loss value)
-                fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
+                fd= {x: batch_x, dec_in: dec_input, y: batch_y, init_state_placeholder: new_state}
                 summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer], feed_dict=fd)
                 train_writer.add_summary(summary, epoch)
 
@@ -276,7 +294,7 @@ if __name__ == "__main__":
                 unused_y = np.zeros((1,MAX_SEQ_LEN))
                 sample_init_state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
 
-                fd= {x: sample_batch, y: unused_y, init_state_placeholder: sample_init_state}
+                fd= {x: sample_batch, dec_in: dec_input, y: unused_y, init_state_placeholder: sample_init_state}
                 summary, predicted_output = sess.run([merged, pred], feed_dict=fd)
 
                 first_pred_output = predicted_output[0]
@@ -294,7 +312,7 @@ if __name__ == "__main__":
                     #   I'm not a billion percent sure what this does....
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
-                    fd= {x: batch_x, y: batch_y, init_state_placeholder: new_state}
+                    fd= {x: batch_x, dec_in: dec_input, y: batch_y, init_state_placeholder: new_state}
                     summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
                                           feed_dict=fd,
                                           options=run_options,

@@ -5,13 +5,13 @@ import numpy as np # Used for One-hot encoding
 import json # Used for json helper
 
 class Vocabulary:
-    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8', custom_eos=u'\xa4', custom_split=u'\u00BB'):
+    def __init__(self,vocab=None,custom_go=u'\xbb' ,custom_unk=u'\xac' ,custom_pad=u'\xf8', custom_eos=u'\xa4', custom_split=u'~'):
         if not vocab:
             # DEFAULT MAGIC THE GATHERING VOCABULARY
             self.vocab = [u'\xbb','|', '5', 'c', 'r', 'e', 'a', 't', 'u', '4', '6', 'h', 'm', 'n', ' ', 'o', 'd', 'l', 'i', '7', \
                      '8', '&', '^', '/', '9', '{', 'W', '}', ',', 'T', ':', 's', 'y', 'b', 'f', 'v', 'p', '.', '3', \
                      '0', 'A', '1', 'w', 'g', '\\', 'E', '@', '+', 'R', 'C', 'x', 'B', 'G', 'O', 'k', '"', 'N', 'U', \
-                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac', u'\xf8', u'\xa4',u'\u00BB']
+                     "'", 'q', 'z', '-', 'Y', 'X', '*', '%', '[', '=', ']', '~', 'j', 'Q', 'L', 'S', 'P', '2',u'\xac', u'\xf8', u'\xa4']
         else:
             self.vocab = vocab
 
@@ -71,12 +71,16 @@ class SongBatcher:
         mod_songs = []
         for s in songs:
             m = self.vocab.go_char + s + self.vocab.eos_char
-            mod_songs.append()
+            m = m.split("\n")
+            m = [l for l in m if len(l.strip()) > 0]
+            m = [self.vocab.split_char+l for l in m[1:]] # Start from 1 to skip our GO char
+            mod_songs.append(m)
         self.songs = mod_songs
-        print(self.songs[0])
-        HODOR
-        # Add data
-        self.songs = [s.split("\n") for s in songs] # Turn each song into a list of lines
+
+        # for l in self.songs[0][:10]:
+        #     print(l)
+        # print("Split char: {}".format(self.vocab.split_char))
+        # HODOR
         self.num_batches = sum([len(s) for s in songs])
 
         # Set up batch generator

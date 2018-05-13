@@ -88,7 +88,7 @@ GRAD_CLIP = 5.0
 LSTM_SIZE = 512
 NUM_LAYERS = 3
 # Since songs can have differing numbers of lines
-# it doesn't make sense to have multiple songs represented in a batchself.
+# it doesn't make sense to have multiple songs represented in a batch.
 # At least not yet.
 BATCH_SIZE = 1
 NUM_EPOCHS = 100
@@ -101,9 +101,11 @@ DROPOUT_KEEP_PROB = 0.8 #0.5
 TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
-PRIME_TEXT = u"»"
 N_CLASSES = 98
-vocab = RH.vocab.vocab
+vocab_obj = RH.vocab
+vocab = vocab_obj.vocab
+PRIME_TEXT = u"»"
+
 
 def weighted_pick(weights):
     t = np.cumsum(weights)
@@ -132,13 +134,8 @@ with tf.variable_scope("model") as super_scope:
     batch_size = tf.shape(x)[0]
 
     #Inputs
-    #onehot = tf.reshape(tf.one_hot(x, N_CLASSES),[-1,N_CLASSES])
-    #rnn_inputs  = tf.reshape(tf.layers.dense(inputs=onehot, units=LSTM_SIZE,activation=tf.nn.sigmoid),[-1,1,LSTM_SIZE])
     embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
     rnn_inputs = tf.nn.embedding_lookup(embedding, x)
-
-    #embedding = tf.get_variable("embedding", [N_CLASSES, LSTM_SIZE])
-    #rnn_inputs = tf.nn.embedding_lookup(embedding, x)
 
     # RNN
     lstm = tf.contrib.rnn.LSTMCell(LSTM_SIZE)
@@ -179,8 +176,6 @@ with tf.variable_scope("model") as super_scope:
     optimizer = op.apply_gradients(zip(grads, tvars))
 
     # Initialize variables
-    #init = tf.global_variables_initializer()
-    # 'Saver' op to save and restore all the variables
     saver = tf.train.Saver()
 
 
@@ -188,9 +183,7 @@ with tf.variable_scope("model") as super_scope:
 if __name__ == "__main__":
     print("Beginning Session")
     #  TRAINING Parameters
-    #vocab,batches = getTrainingData()
     NUM_BATCHES = RH.num_batches
-    # N_CLASSES = len(vocab)
 
     #Running first session
     with tf.Session() as sess:
@@ -290,12 +283,17 @@ if __name__ == "__main__":
                         for j in p:
                             pred_index = weighted_pick(j)
                             pred_letter = vocab[pred_index]
+                            if pred_letter == vocab_obj.pad_char:
+                                pred_letter = vocab_obj.split_char
+                                pred_index = vocab.index(pred_letter)
+                                preds.append("\n")
                             preds.append(pred_letter)
                             init_x = np.array([[pred_index]])
+                            if pred_letter == vocab_obj.eos_char:
+                                break
                     print(" ") # Spacer
                     print("PRED: {}".format(''.join(preds)))
                     save_path = saver.save(sess, model_path, global_step = epoch)
-                    #print("TRUE: {}".format(''.join(true)))
 
             end = time.time()
             avg_cost = (sum_cost/BATCH_SIZE)/NUM_BATCHES
