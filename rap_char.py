@@ -5,7 +5,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import os
-from helpers import rap_parser, rap_helper
+from helpers import rap_helper
 import pickle
 import time
 import caffeine
@@ -35,51 +35,8 @@ data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 
 MAX_SEQ_LEN = 100
 
-try:
-    with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
-        RH = pickle.load(f)
-except Exception as e:
-    print(e)
-    songs,parsed_vocab = rap_parser.getSongs()
+RH = rap_helper.getRapData(os.path.join(checkpoint_path,PICKLE_PATH),max_seq_len=MAX_SEQ_LEN)
 
-    RH = rap_helper.SongBatcher(songs,parsed_vocab)
-
-    # Length investigation
-    # Looks like there are only about 1000 songs (out of 19k)
-    # that contain batches 100 words long or longer
-    REMOVE_BIG_SEQ = True
-    if REMOVE_BIG_SEQ:
-        len_dict = {}
-        songs_to_remove = []
-        for i in range(len(RH.songs)):
-            s = RH.songs[i]
-            for line in s:
-                l = len(line)
-                if l not in len_dict:
-                    len_dict[l] = [line]
-                else:
-                    len_dict[l].append(line)
-                if l > MAX_SEQ_LEN:
-                    songs_to_remove.append(i)
-        k = list(len_dict.keys())
-        k.sort()
-        # total = 0
-        # for i in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 127, 128, 129, 130, 131, 133, 134, 136, 140, 142, 143, 144, 146, 147, 148, 150, 151, 152, 153, 154, 161, 162, 163, 170, 171, 172, 173, 180, 187, 198, 202, 203, 209, 213, 215, 238, 245, 249, 264, 312, 316, 565]:
-        #     total += len(len_dict[i])
-        # print("TOTAL: {}".format(total))
-        songs_to_remove = list(set(songs_to_remove))
-        print("Number of songs to remove: {}".format(len(songs_to_remove)))
-        print("Number of songs before removal: {}".format(len(RH.songs)))
-        songs_to_remove.sort()
-        for i in songs_to_remove[::-1]:
-            del RH.songs[i]
-        print("Number of songs after removal: {}".format(len(RH.songs)))
-
-    print("parsed vocab length: {}".format(len(parsed_vocab)))
-
-    # Save our Rap Helper
-    with open(os.path.join(checkpoint_path,PICKLE_PATH),"wb") as f:
-        pickle.dump(RH,f)
 
 
 # Network Parameters
@@ -101,9 +58,9 @@ DROPOUT_KEEP_PROB = 0.8 #0.5
 TEMPERATURE = 1.0
 NUM_PRED = 50
 already_trained = 0
-N_CLASSES = 98
 vocab_obj = RH.vocab
 vocab = vocab_obj.vocab
+N_CLASSES = len(vocab)
 PRIME_TEXT = u"»"
 
 
@@ -283,10 +240,10 @@ if __name__ == "__main__":
                         for j in p:
                             pred_index = weighted_pick(j)
                             pred_letter = vocab[pred_index]
-                            if pred_letter == vocab_obj.pad_char:
+                            if pred_letter == vocab_obj.split_end_char:
                                 pred_letter = vocab_obj.split_char
                                 pred_index = vocab.index(pred_letter)
-                                preds.append("\n")
+                                preds.append(vocab_obj.split_end_char + "\n")
                             preds.append(pred_letter)
                             init_x = np.array([[pred_index]])
                             if pred_letter == vocab_obj.eos_char:

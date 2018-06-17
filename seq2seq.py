@@ -3,19 +3,25 @@ import tensorflow as tf
 from helpers.utils import save,load
 import os
 import time
-from helpers import word_helpers, dialog_parser
+from helpers import word_helpers, rap_helper
 import caffeine
 
 #from tensorflow.examples.tutorials.mnist import input_data
 #mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
 
 # PATHS
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
-SAVE_PATH = os.path.join(DIR_PATH,"saved","dialog","model.ckpt")
-CHKPT_PATH = os.path.join(DIR_PATH,"saved","dialog")
+SAVE_DIR = "seq2seq"
+CHECKPOINT_NAME = "rap_seq_steps.ckpt"
+DATA_NAME = "ohhla.txt"
+PICKLE_PATH = "seq_rh.pkl"
+SUBDIR_NAME = "seq2seq"
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+model_path = os.path.join(dir_path,"saved",SAVE_DIR,CHECKPOINT_NAME)
+checkpoint_path = os.path.join(dir_path,"saved",SAVE_DIR)
+data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 LOG_DIR = "/tmp/tensorflow/log"
-#DATA_PATH = os.path.join(DIR_PATH,"data","cards_tokenized.txt")
-LOAD_PATH = os.path.join(DIR_PATH,"data","dialog")
+
 
 # Set random seed
 seed = 36 # Pick your favorite
@@ -41,93 +47,47 @@ NUM_LAYERS = 2 #3
 PRIME_TEXT = "how are you doing today ?".split(" ")
 DEBUG = False #True
 
-GO =    dialog_parser.GO
-UNK =   dialog_parser.UNK
-PAD =   dialog_parser.PAD
-EOS =   dialog_parser.EOS
-SPLIT = dialog_parser.SPLIT
 
 if tf.gfile.Exists(LOG_DIR):
     tf.gfile.DeleteRecursively(LOG_DIR)
 tf.gfile.MakeDirs(LOG_DIR)
 
-###################################################################################################
-
-def padSequence(seq,pad_char):
-    if len(seq) >= MAX_SEQ_LEN:
-        return seq[:MAX_SEQ_LEN]
-    else:
-        pad_num = MAX_SEQ_LEN - len(seq)
-        return ([pad_char] * pad_num) + seq
-
-try:
-    input_seq = load(LOAD_PATH,"inputs.pkl")
-    target_seq = load(LOAD_PATH,"targets.pkl")
-    convs = load(LOAD_PATH,"convs.pkl")
-    vocab = load(LOAD_PATH,"vocab.pkl")
-    print("Loaded prepared data...")
-
-    # save(input_seq,"inputs.pkl",protocol=2)
-    # save(target_seq,"targets.pkl",protocol=2)
-    # save(convs,"convs.pkl",protocol=2)
-    # save(vocab,"vocab.pkl",protocol=2)
-
-
-except Exception as e:
-    print("FAILED TO LOAD:")
-    print(e)
-
-    input_seq,target_seq,convs,vocab = dialog_parser.parseDialog()
-
-    save(input_seq,LOAD_PATH,"inputs.pkl")
-    save(target_seq,LOAD_PATH,"targets.pkl")
-    save(convs,LOAD_PATH,"convs.pkl")
-    save(vocab,LOAD_PATH,"vocab.pkl")
-
-
-
+##################################################################################################
 ######################## DATA PREP ########################
-vocab_lookup = {}
-reverse_vocab_lookup = {}
+SB = rap_helper.getRapData(os.path.join(checkpoint_path,PICKLE_PATH),max_seq_len=MAX_SEQ_LEN)
+songs = SB.songs
+vocab_obj = SB.vocab
+vocab = vocab_obj.vocab
+SS = rap_helper.SongSequencer(songs,vocab,MAX_SEQ_LEN)
 
-NUM_SAMPLES = len(input_seq)
+N_CLASSES = len(vocab)
+
+vocab_lookup = SS.vocab_lookup
+reverse_vocab_lookup = SS.reverse_vocab_lookup
+
+NUM_SAMPLES = SS.num_songs
 
 for i in range(len(vocab)):
-    word = vocab[i]
-    vocab_lookup[word] = i
-    reverse_vocab_lookup[i] = word
+    char = vocab[i]
+    vocab_lookup[char] = i
+    reverse_vocab_lookup[i] = char
 
-pad_val = vocab_lookup[PAD]
+pad_val = vocab_lookup[rap_helper.PAD]
 
-if DEBUG:
-    print("vocab length: ",len(vocab))
-    #print(input_seq[1])
-    print(input_seq[0])
-    print(target_seq[0])
-    print(" ".join([reverse_vocab_lookup[i] for i in input_seq[0]]))
-    print(" ".join([reverse_vocab_lookup[i] for i in target_seq[0]]))
-    #print(convs[0].lines[1])
+encoder_input,encoder_target,decoder_target = SS.__next__()
 
-    totes = len(input_seq)
-    less_than_max = 0
-    for i in input_seq:
-        if len(i) < MAX_SEQ_LEN:
-            less_than_max += 1
-    print(totes)
-    print(less_than_max)
-    print((less_than_max)/totes)
+print(encoder_input)
+print(encoder_target)
+print(decoder_target)
+print(SS.arrayify(encoder_input).shape)
 
-    print(padSequence(input_seq[0],pad_val))
+# [30002 30002 30002 30002 30002 30002 30002 30002 30002 30002 30002 30002
+#  30002 30002 30002 30002 30002 30002 30002    36    18   110    22   934
+#      4   948   948 30001 30001    12  3732  7908    40   428    80  3799
+#  19730   985   495 30020   948    54    32     5 23544     0   948   948
+#    188     0]
+# ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ ¬ can we make this quick ?   ¿ ¿ and andrew barrett are having an incredibly horrendous public break -  up on the quad .   again .
 
-padded_input = [padSequence(i,pad_val) for i in input_seq]
-padded_target= [padSequence(t,pad_val) for t in target_seq]
-
-encoder_input = np.asarray(padded_input,dtype='int32')
-decoder_target = np.asarray(padded_target,dtype='int32')
-N_CLASSES = len(vocab)
-if DEBUG:
-    print(encoder_input.shape)
-    print(decoder_target.shape)
 
 
 ######################################### UTILITY FUNCTIONS ########################################
@@ -255,33 +215,17 @@ if __name__ == "__main__":
         for epoch in range(already_trained,already_trained+MAX_STEPS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-            dec_input = np.array([[vocab_lookup[GO]]])
+            dec_input = np.array([[vocab_lookup[vocab_obj.go_char]]])
             for i in range(0,NUM_SAMPLES//BATCH_SIZE):
                 # Reset state value
-                new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
-                # Generate a batch
-                batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
-                batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+                # new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
+                # # Generate a batch
+                # batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+                # batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
 
-                print(batch_x.shape)
-                print(batch_y.shape)
-                print(dec_input.shape)
-
-                for b in batch_x[0]:
-                    print(reverse_vocab_lookup[b])
+                encoder_input,encoder_target,decoder_target = SS.__next__()
+                print(encoder_input)
                 HODOR
-
-                # print(encoder_input.shape)
-                # print(decoder_target.shape)
-                # print(encoder_input[0].shape)
-                # print(" ".join([reverse_vocab_lookup[b] for b in encoder_input[0]]))
-                # print(" ".join([reverse_vocab_lookup[b] for b in encoder_input[1]]))
-                # print(" ".join([reverse_vocab_lookup[b] for b in decoder_target[0]]))
-                # print(batch_x.shape)
-                # print(batch_y.shape)
-                # print("|".join([reverse_vocab_lookup[b] for b in batch_x[0]]))
-                # print(" ".join([reverse_vocab_lookup[b] for b in batch_y[0]]))
-                # HODOR
 
                 # Run optimization op (backprop) and cost op (to get loss value)
                 fd= {x: batch_x, dec_in: dec_input, y: batch_y, init_state_placeholder: new_state}
@@ -289,7 +233,7 @@ if __name__ == "__main__":
                 train_writer.add_summary(summary, epoch)
 
                 int_prime = [vocab_lookup[p] for p in PRIME_TEXT]
-                sample_input = padSequence(int_prime,pad_val)
+                sample_input = SS.padSequence(int_prime,pad_val)
                 sample_batch = np.array(sample_input).reshape((1,MAX_SEQ_LEN))
                 unused_y = np.zeros((1,MAX_SEQ_LEN))
                 sample_init_state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
