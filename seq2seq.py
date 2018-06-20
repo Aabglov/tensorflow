@@ -35,7 +35,7 @@ DECAY_RATE = 1.0
 ADAM_BETA = 0.5
 GRAD_CLIP = 5.0
 
-BATCH_SIZE = 100#64
+BATCH_SIZE = 1#64
 MAX_STEPS = 1000
 LOG_FREQUENCY = 10
 # max length of 100 excludes about 1200 of 300k samples.
@@ -76,11 +76,6 @@ pad_val = vocab_lookup[rap_helper.PAD]
 
 encoder_input,encoder_target,decoder_target = SS.__next__()
 
-print(encoder_input)
-print(encoder_target)
-print(decoder_target)
-print(SS.arrayify(encoder_input).shape)
-
 # [30002 30002 30002 30002 30002 30002 30002 30002 30002 30002 30002 30002
 #  30002 30002 30002 30002 30002 30002 30002    36    18   110    22   934
 #      4   948   948 30001 30001    12  3732  7908    40   428    80  3799
@@ -97,9 +92,10 @@ print(SS.arrayify(encoder_input).shape)
 # Input placeholders
 with tf.name_scope('input'):
     # Placeholders
-    x = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='input_placeholder')
-    dec_in = tf.placeholder(tf.int32, [None, 1], name='decoder_input')
-    y = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='labels_placeholder')
+    en_input = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='encoder_input')
+    en_target = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='encoder_target')
+    dec_input = tf.placeholder(tf.int32, [None, 1], name='decoder_input')
+    dec_target = tf.placeholder(tf.int32, [None, MAX_SEQ_LEN], name='decoder_target')
     #dropout_prob = tf.placeholder(tf.float32)
     # Our initial state placeholder:
     init_state_placeholder = tf.placeholder(tf.float32, [NUM_LAYERS, 2, None, LSTM_SIZE], name='encoder_state_placeholder')
@@ -115,8 +111,24 @@ def RNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
             [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)]
         )
 
-        # Get dynamic batch_size
-        batch_size = tf.shape(x)[0]
+        # RNN
+        lstm = tf.contrib.rnn.LSTMCell(lstm_size)
+        dropout = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=dropout_prob)
+        stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * num_layers)
+        rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                     inputs=input_tensor,
+                                                     initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+        return rnn_outputs,final_state
+
+# Decoder -- uses REUSE
+def DecoderRNN(input_tensor,init_state,num_layers,lstm_size,name,dropout_prob=0.3):
+    with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+        # Create appropriate LSTMStateTuple for dynamic_rnn function out of our placeholder
+        l = tf.unstack(init_state, axis=0)
+
+        rnn_tuple_state = tuple(
+            [tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)]
+        )
 
         # RNN
         lstm = tf.contrib.rnn.LSTMCell(lstm_size)
@@ -153,24 +165,36 @@ def decoder(input_tensor,init_state):
     lstm_size = LSTM_SIZE
     dropout_prob = 0.3
 
-    rnn_inputs = embed(input_tensor)
-
+    rnn_input = embed(input_tensor)
+    #rnn_input = input_tensor
+    state = init_state
+    outs = []
     with tf.name_scope('decoder'):
-        rnn_out,rnn_state = RNN(rnn_inputs,init_state,num_layers,lstm_size,'decoder',dropout_prob)
-        dense_out = tf.layers.dense(rnn_out,len(vocab),activation=None,use_bias=True)
-
+        for _ in range(MAX_SEQ_LEN):
+            rnn_input,state = DecoderRNN(rnn_input,state,num_layers,lstm_size,'decoder',dropout_prob)
+            outs.append(tf.reshape(rnn_input,[-1,lstm_size]))
+    total_out = tf.stack(outs,axis=1)
+    dense_out = tf.layers.dense(total_out,len(vocab),activation=None,use_bias=True)
     return dense_out
 
 with tf.variable_scope("model") as scope:
-    encoder_out,encoder_state = encoder(x,init_state_placeholder)
+    encoder_out,encoder_state = encoder(en_input,init_state_placeholder)
+    en_dense_out = tf.layers.dense(encoder_out,len(vocab),activation=None,use_bias=True)
     # decoder_out are our logits
-    decoder_out = decoder(dec_in, encoder_state)
+    decoder_out = decoder(dec_input, encoder_state)
     pred = tf.nn.softmax(decoder_out)
 
 # Define loss function(s)
 with tf.name_scope('loss'):
-    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=decoder_out)
-    cost = tf.reduce_mean(loss)
+    # print("\nEncoder output: {}\n".format(encoder_out.shape))
+    # print("\nEncoder (formatted) output: {}\n".format(en_dense_out.shape))
+    # print("\nEncoder Target: {}\n".format(en_target.shape))
+    # print("\nDecoder Output: {}\n".format(decoder_out.shape))
+    # print("\nDecoder Target: {}\n".format(dec_target.shape))
+
+    en_loss =  tf.nn.sparse_softmax_cross_entropy_with_logits(labels=en_target, logits=en_dense_out)
+    dec_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=dec_target, logits=decoder_out)
+    cost = (tf.reduce_mean(en_loss) + tf.reduce_mean(dec_loss)) / 2.0
     tf.summary.scalar('cost', cost)
 
 # Define optimizer
@@ -204,31 +228,34 @@ if __name__ == "__main__":
         sess.run(local_init)
 
         try:
-            ckpt = tf.train.get_checkpoint_state(CHKPT_PATH)
+            ckpt = tf.train.get_checkpoint_state(checkpoint_path)
             saver.restore(sess, ckpt.model_checkpoint_path)
-            print("Model restored from file: %s" % SAVE_PATH)
+            print("Model restored from file: %s" % model_path)
         except Exception as e:
             print("Model restore failed {}".format(e))
 
+        decoder_input = np.array([[vocab_lookup[vocab_obj.go_char]]])
         # Training cycle
         already_trained = 0
         for epoch in range(already_trained,already_trained+MAX_STEPS):
             # Set learning rate
             sess.run(tf.assign(lr,LEARNING_RATE * (DECAY_RATE ** epoch)))
-            dec_input = np.array([[vocab_lookup[vocab_obj.go_char]]])
+
             for i in range(0,NUM_SAMPLES//BATCH_SIZE):
                 # Reset state value
-                # new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
+                new_state = np.zeros((NUM_LAYERS,2,BATCH_SIZE,LSTM_SIZE))
                 # # Generate a batch
                 # batch_x =  encoder_input[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
                 # batch_y = decoder_target[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
 
                 encoder_input,encoder_target,decoder_target = SS.__next__()
-                print(encoder_input)
-                HODOR
+                # print(encoder_input.shape)
+                # print(encoder_target.shape)
+                # print(decoder_target.shape)
+                # HODOR
 
                 # Run optimization op (backprop) and cost op (to get loss value)
-                fd= {x: batch_x, dec_in: dec_input, y: batch_y, init_state_placeholder: new_state}
+                fd= {en_input: encoder_input, en_target: encoder_target, dec_input: decoder_input, dec_target: decoder_target, init_state_placeholder: new_state}
                 summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer], feed_dict=fd)
                 train_writer.add_summary(summary, epoch)
 
@@ -238,7 +265,7 @@ if __name__ == "__main__":
                 unused_y = np.zeros((1,MAX_SEQ_LEN))
                 sample_init_state = np.zeros((NUM_LAYERS,2,1,LSTM_SIZE))
 
-                fd= {x: sample_batch, dec_in: dec_input, y: unused_y, init_state_placeholder: sample_init_state}
+                fd= {en_input: sample_batch, en_target: unused_y, dec_input: decoder_input, y: unused_y, init_state_placeholder: sample_init_state}
                 summary, predicted_output = sess.run([merged, pred], feed_dict=fd)
 
                 first_pred_output = predicted_output[0]
@@ -256,7 +283,7 @@ if __name__ == "__main__":
                     #   I'm not a billion percent sure what this does....
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
-                    fd= {x: batch_x, dec_in: dec_input, y: batch_y, init_state_placeholder: new_state}
+                    fd= {en_input: encoder_input, en_target: encoder_target, dec_input: decoder_input, dec_target: decoder_target, init_state_placeholder: new_state}
                     summary, s, c, _ = sess.run([merged, encoder_state, cost, optimizer],
                                           feed_dict=fd,
                                           options=run_options,
