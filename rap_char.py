@@ -100,17 +100,11 @@ with tf.variable_scope("model") as super_scope:
     stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
 
     state = rnn_tuple_state
-    output_list = []
-    output, state = stacked_lstm(rnn_inputs[:,0], state)
-    output_list.append(tf.reshape(output,[-1,1,LSTM_SIZE]))
-    final_state = tf.identity(state, name="final_state")
 
-    rnn_outputs = tf.concat(output_list,axis=1)
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                 inputs=rnn_inputs,
+                                                 initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
 
-    # rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
-    #                                              inputs=rnn_inputs,
-    #                                              initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
-    #
 
     temp = tf.placeholder(tf.float32, name="temp")
 

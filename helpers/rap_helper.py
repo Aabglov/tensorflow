@@ -128,6 +128,7 @@ class RapParser:
                    '”': self.DOUBLE_QUOTE,
                    '`': self.SINGLE_QUOTE,
                    '’': self.SINGLE_QUOTE,
+                   'ü','u',
                    '…': "..."
                    }
 
@@ -280,12 +281,16 @@ class SongSequencer:
             self.vocab_lookup[char] = i
             self.reverse_vocab_lookup[i] = char
 
-    def padSequence(self,seq):
+    def padSequence(self,seq,pad_end=False):
         if len(seq) >= self.max_seq_len:
             return seq[:self.max_seq_len]
         else:
             pad_num = self.max_seq_len - len(seq)
-            return "".join([self.pad_char] * pad_num) + seq
+            padding = "".join([self.pad_char] * pad_num)
+            if pad_end:
+                return seq + padding
+            else:
+                return padding + seq
 
     def arrayify(self,seq):
         return np.asarray([[self.vocab_lookup[s] for s in seq]])
@@ -299,14 +304,17 @@ class SongSequencer:
             self.cur_song = self.songs[self.song_index]
             self.line_index = 0
 
-        current_song = self.cur_song[self.line_index]
-        ret =  self.arrayify(self.padSequence(current_song[:-1])),\
-               self.arrayify(self.padSequence(current_song[1:])), \
-               self.arrayify(self.padSequence(self.cur_song[self.line_index+1]))
+        current_line = self.cur_song[self.line_index]
+        next_line = self.cur_song[self.line_index + 1]
+
+        ret =  self.arrayify(self.padSequence(current_line)),\
+               self.arrayify(self.padSequence(next_line[:-1])), \
+               self.arrayify(self.padSequence(next_line[1:],pad_end=True))
 
         self.line_index += 1
 
         return ret
+
 
 
 def getRapData(path,max_seq_len=100):

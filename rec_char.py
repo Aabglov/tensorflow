@@ -37,6 +37,7 @@ data_path = os.path.join(dir_path,"data",SUBDIR_NAME,DATA_NAME)
 try:
     with open(os.path.join(checkpoint_path,PICKLE_PATH),"rb") as f:
         WH = pickle.load(f)
+    print("Loaded helper objects...")
 except Exception as e:
     print(e)
     # What's with those weird symbols?
@@ -52,6 +53,7 @@ except Exception as e:
     vocab += "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split(" ")
     vocab += ['|', ' ', '&', '^', '/', '{', '}', ',', ':', '.', '\\',  '@', '+', '"', "'", '-', '*', '%', '[', '=', ']', '~']
     vocab += [u'\xbb',  u'\xac', u'\xf8', u'\xa4', u'\u00BB']
+    print("Failed to load helper objects, recreating...")
     # Load mtg tokenized data
     # Special thanks to mtgencode: https://github.com/billzorn/mtgencode
     with open(data_path,"r") as f:
@@ -127,17 +129,17 @@ with tf.variable_scope("model") as super_scope:
     stacked_lstm = tf.contrib.rnn.MultiRNNCell([dropout] * NUM_LAYERS)
 
     state = rnn_tuple_state
-    output_list = []
-    output, state = stacked_lstm(rnn_inputs[:,0], state)
-    output_list.append(tf.reshape(output,[-1,1,LSTM_SIZE]))
-    final_state = tf.identity(state, name="final_state")
-
-    rnn_outputs = tf.concat(output_list,axis=1)
-
-    # rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
-    #                                              inputs=rnn_inputs,
-    #                                              initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+    # output_list = []
+    # output, state = stacked_lstm(rnn_inputs[:,0], state)
+    # output_list.append(tf.reshape(output,[-1,1,LSTM_SIZE]))
+    # final_state = tf.identity(state, name="final_state")
     #
+    # rnn_outputs = tf.concat(output_list,axis=1)
+
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=stacked_lstm,
+                                                 inputs=rnn_inputs,
+                                                 initial_state=rnn_tuple_state)#stacked_lstm.zero_state(batch_size,tf.float32))
+
 
     temp = tf.placeholder(tf.float32, name="temp")
 
@@ -145,7 +147,7 @@ with tf.variable_scope("model") as super_scope:
     with tf.variable_scope("dense") as scope:
         flat = tf.reshape(rnn_outputs, [-1, LSTM_SIZE])
         dense = tf.layers.dense(inputs=flat, units=N_CLASSES)
-        logits = tf.reshape(dense,[-1,batch_size, N_CLASSES])
+        logits = tf.reshape(dense,[-1,1, N_CLASSES])
     #pred = tf.nn.softmax(logits)
     pred = tf.nn.softmax(tf.div(logits,temp),name="pred")
 
@@ -222,6 +224,7 @@ if __name__ == "__main__":
                     batch_x = batch[:,i].reshape((BATCH_SIZE,1))
                     batch_y = batch[:,(i+1)].reshape((BATCH_SIZE,1))
                     # Run optimization op (backprop) and cost op (to get loss value)
+
                     _, s, c = sess.run([optimizer, final_state, cost], feed_dict={x: batch_x,
                                                                                   y: batch_y,
                                                                                   init_state: state,
